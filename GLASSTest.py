@@ -201,7 +201,7 @@ def test(pool="size",
     outs = []
     for repeat in range(args.repeat):
         start_time = time.time()
-        set_seed(repeat + 1)
+        set_seed((1 << repeat) - 1)
         print(f"repeat {repeat}")
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio,
                          aggr)
