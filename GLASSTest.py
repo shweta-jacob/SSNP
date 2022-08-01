@@ -11,6 +11,8 @@ import time
 import random
 import yaml
 
+from impl.models import MLP
+
 parser = argparse.ArgumentParser(description='')
 # Dataset settings
 parser.add_argument('--dataset', type=str, default='ppi_bp')
@@ -56,6 +58,7 @@ if baseG.y.unique().shape[0] == 2:
     # binary classification task
     def loss_fn(x, y):
         return BCEWithLogitsLoss()(x.flatten(), y.flatten())
+
 
     baseG.y = baseG.y.to(torch.float)
     if baseG.y.ndim > 1:
@@ -151,8 +154,8 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
                          map_location=torch.device('cpu')).detach()
         conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
 
-    mlp = nn.Linear(hidden_dim * (conv_layer) if jk else hidden_dim,
-                    output_channels)
+    mlp = MLP(input_channels=2 * hidden_dim * (conv_layer), hidden_channels=hidden_dim, output_channels=output_channels,
+              num_layers=3)
 
     pool_fn_fn = {
         "mean": models.MeanPool,
@@ -197,7 +200,8 @@ def test(pool="size",
 
     outs = []
     for repeat in range(args.repeat):
-        set_seed((1 << repeat) - 1)
+        start_time = time.time()
+        set_seed(repeat + 1)
         print(f"repeat {repeat}")
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio,
                          aggr)
@@ -255,9 +259,12 @@ def test(pool="size",
             if early_stop > 100 / num_div:
                 break
         print(
-            f"end: epoch {i+1}, train time {sum(trn_time):.2f} s, val {val_score:.3f}, tst {tst_score:.3f}",
+            f"end: epoch {i + 1}, train time {sum(trn_time):.2f} s, val {val_score:.3f}, tst {tst_score:.3f}",
             flush=True)
+        end_time = time.time()
         outs.append(tst_score)
+        time_taken = end_time - start_time
+        print(f'Time taken: {time_taken}')
     print(
         f"average {np.average(outs):.3f} error {np.std(outs) / np.sqrt(len(outs)):.3f}"
     )

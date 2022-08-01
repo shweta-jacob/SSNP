@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.utils.rnn import pad_sequence
 from torch_geometric.nn import GCNConv
 from torch_geometric.nn.norm import GraphNorm, GraphSizeNorm
 from torch_geometric.nn.glob.glob import global_mean_pool, global_add_pool, global_max_pool
@@ -343,15 +344,26 @@ class GLASS(nn.Module):
         emb = torch.mean(emb, dim=1)
         return emb
 
-    def Pool(self, emb, subG_node, pool):
+    def Pool(self, emb, subG_node, pool, num_nodes):
         batch, pos = pad2batch(subG_node)
-        emb = emb[pos]
-        emb = pool(emb, batch)
+        complement = []
+        for subgraph in subG_node:
+            subgraph = list(filter(lambda node: node != -1, subgraph.tolist()))
+            subg_comp = torch.Tensor(list(set(range(num_nodes)).difference(subgraph)))
+            complement.append(subg_comp)
+        complement = pad_sequence(complement, batch_first=True, padding_value=-1).to(torch.int64)
+        batch_comp, pos_comp = pad2batch(complement)
+        emb_subG = emb[pos]
+        emb_comp = emb[pos_comp]
+        emb_subG = pool(emb_subG, batch)
+        emb_comp = pool(emb_comp, batch_comp)
+        emb = torch.cat([emb_subG, emb_comp], dim=-1)
         return emb
 
     def forward(self, x, edge_index, edge_weight, subG_node, z=None, id=0):
+        num_nodes = len(x)
         emb = self.NodeEmb(x, edge_index, edge_weight, z)
-        emb = self.Pool(emb, subG_node, self.pools[id])
+        emb = self.Pool(emb, subG_node, self.pools[id], num_nodes)
         return self.preds[id](emb)
 
 
