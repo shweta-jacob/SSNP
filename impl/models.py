@@ -129,11 +129,9 @@ class GLASSConv(torch.nn.Module):
                  dropout=0.2):
         super().__init__()
         self.trans_fns = nn.ModuleList([
-            nn.Linear(in_channels, out_channels),
             nn.Linear(in_channels, out_channels)
         ])
         self.comb_fns = nn.ModuleList([
-            nn.Linear(in_channels + out_channels, out_channels),
             nn.Linear(in_channels + out_channels, out_channels)
         ])
         self.adj = torch.sparse_coo_tensor(size=(0, 0))
@@ -151,27 +149,17 @@ class GLASSConv(torch.nn.Module):
             _.reset_parameters()
         self.gn.reset_parameters()
 
-    def forward(self, x_, edge_index, edge_weight, mask):
+    def forward(self, x_, edge_index, edge_weight):
         if self.adj.shape[0] == 0:
             n_node = x_.shape[0]
             self.adj = buildAdj(edge_index, edge_weight, n_node, self.aggr)
-        # transform node features with different parameters individually.
-        x = self.activation(self.trans_fns[1](x_))
-        # x0 = self.activation(self.trans_fns[0](x_))
-        # mix transformed feature.
-        # x = torch.where(mask, self.z_ratio * x1 + (1 - self.z_ratio) * x0,
-        #                 self.z_ratio * x0 + (1 - self.z_ratio) * x1)
+        x = self.activation(self.trans_fns[0](x_))
         # pass messages.
         x = self.adj @ x
         x = self.gn(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = torch.cat((x, x_), dim=-1)
-        # transform node features with different parameters individually.
-        x = self.comb_fns[1](x)
-        # x0 = self.comb_fns[0](x)
-        # mix transformed feature.
-        # x = torch.where(mask, self.z_ratio * x1 + (1 - self.z_ratio) * x0,
-        #                 self.z_ratio * x0 + (1 - self.z_ratio) * x1)
+        x = self.comb_fns[0](x)
         return x
 
 
@@ -238,13 +226,7 @@ class EmbZGConv(nn.Module):
             for gn in self.gns:
                 gn.reset_parameters()
 
-    def forward(self, x, edge_index, edge_weight, z=None):
-        # z is the node label.
-        if z is None:
-            mask = (torch.zeros(
-                (x.shape[0]), device=x.device) < 0.5).reshape(-1, 1)
-        else:
-            mask = (z > 0.5).reshape(-1, 1)
+    def forward(self, x, edge_index, edge_weight):
         # convert integer input to vector node features.
         x = self.input_emb(x).reshape(x.shape[0], -1)
         x = self.emb_gn(x)
@@ -252,13 +234,13 @@ class EmbZGConv(nn.Module):
         x = F.dropout(x, p=self.dropout, training=self.training)
         # pass messages at each layer.
         for layer, conv in enumerate(self.convs[:-1]):
-            x = conv(x, edge_index, edge_weight, mask)
+            x = conv(x, edge_index, edge_weight)
             xs.append(x)
             if not (self.gns is None):
                 x = self.gns[layer](x)
             x = self.activation(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
-        x = self.convs[-1](x, edge_index, edge_weight, mask)
+        x = self.convs[-1](x, edge_index, edge_weight)
         xs.append(x)
 
         if self.jk:
@@ -334,11 +316,11 @@ class GLASS(nn.Module):
         self.preds = preds
         self.pools = pools
 
-    def NodeEmb(self, x, edge_index, edge_weight, z=None):
+    def NodeEmb(self, x, edge_index, edge_weight):
         embs = []
         for _ in range(x.shape[1]):
             emb = self.conv(x[:, _, :].reshape(x.shape[0], x.shape[-1]),
-                            edge_index, edge_weight, z)
+                            edge_index, edge_weight)
             embs.append(emb.reshape(emb.shape[0], 1, emb.shape[-1]))
         emb = torch.cat(embs, dim=1)
         emb = torch.mean(emb, dim=1)
@@ -362,7 +344,7 @@ class GLASS(nn.Module):
 
     def forward(self, x, edge_index, edge_weight, subG_node, z=None, device=-1, id=0, ):
         num_nodes = len(x)
-        emb = self.NodeEmb(x, edge_index, edge_weight, z)
+        emb = self.NodeEmb(x, edge_index, edge_weight)
         emb = self.Pool(emb, subG_node, self.pools[id], num_nodes, device)
         return self.preds[id](emb)
 
