@@ -156,22 +156,22 @@ class GLASSConv(torch.nn.Module):
             n_node = x_.shape[0]
             self.adj = buildAdj(edge_index, edge_weight, n_node, self.aggr)
         # transform node features with different parameters individually.
-        x1 = self.activation(self.trans_fns[1](x_))
-        x0 = self.activation(self.trans_fns[0](x_))
+        x = self.activation(self.trans_fns[1](x_))
+        # x0 = self.activation(self.trans_fns[0](x_))
         # mix transformed feature.
-        x = torch.where(mask, self.z_ratio * x1 + (1 - self.z_ratio) * x0,
-                        self.z_ratio * x0 + (1 - self.z_ratio) * x1)
+        # x = torch.where(mask, self.z_ratio * x1 + (1 - self.z_ratio) * x0,
+        #                 self.z_ratio * x0 + (1 - self.z_ratio) * x1)
         # pass messages.
         x = self.adj @ x
         x = self.gn(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = torch.cat((x, x_), dim=-1)
         # transform node features with different parameters individually.
-        x1 = self.comb_fns[1](x)
-        x0 = self.comb_fns[0](x)
+        x = self.comb_fns[1](x)
+        # x0 = self.comb_fns[0](x)
         # mix transformed feature.
-        x = torch.where(mask, self.z_ratio * x1 + (1 - self.z_ratio) * x0,
-                        self.z_ratio * x0 + (1 - self.z_ratio) * x1)
+        # x = torch.where(mask, self.z_ratio * x1 + (1 - self.z_ratio) * x0,
+        #                 self.z_ratio * x0 + (1 - self.z_ratio) * x1)
         return x
 
 
