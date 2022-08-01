@@ -344,13 +344,13 @@ class GLASS(nn.Module):
         emb = torch.mean(emb, dim=1)
         return emb
 
-    def Pool(self, emb, subG_node, pool, num_nodes):
+    def Pool(self, emb, subG_node, pool, num_nodes, device):
         batch, pos = pad2batch(subG_node)
         complement = []
         for subgraph in subG_node:
             subgraph = list(filter(lambda node: node != -1, subgraph.tolist()))
             subg_comp = torch.Tensor(list(set(range(num_nodes)).difference(subgraph)))
-            complement.append(subg_comp)
+            complement.append(subg_comp.to(device))
         complement = pad_sequence(complement, batch_first=True, padding_value=-1).to(torch.int64)
         batch_comp, pos_comp = pad2batch(complement)
         emb_subG = emb[pos]
@@ -360,10 +360,10 @@ class GLASS(nn.Module):
         emb = torch.cat([emb_subG, emb_comp], dim=-1)
         return emb
 
-    def forward(self, x, edge_index, edge_weight, subG_node, z=None, id=0):
+    def forward(self, x, edge_index, edge_weight, subG_node, z=None, device=-1, id=0, ):
         num_nodes = len(x)
         emb = self.NodeEmb(x, edge_index, edge_weight, z)
-        emb = self.Pool(emb, subG_node, self.pools[id], num_nodes)
+        emb = self.Pool(emb, subG_node, self.pools[id], num_nodes, device)
         return self.preds[id](emb)
 
 

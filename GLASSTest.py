@@ -218,7 +218,7 @@ def test(pool="size",
         trn_time = []
         for i in range(300):
             t1 = time.time()
-            loss = train.train(optimizer, gnn, trn_loader, loss_fn)
+            loss = train.train(optimizer, gnn, trn_loader, loss_fn, device=config.device)
             trn_time.append(time.time() - t1)
             scd.step(loss)
 
@@ -226,7 +226,7 @@ def test(pool="size",
                 score, _ = train.test(gnn,
                                       val_loader,
                                       score_fn,
-                                      loss_fn=loss_fn)
+                                      loss_fn=loss_fn, device=config.device)
 
                 if score > val_score:
                     early_stop = 0
@@ -234,7 +234,7 @@ def test(pool="size",
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
-                                          loss_fn=loss_fn)
+                                          loss_fn=loss_fn, device=config.device)
                     tst_score = score
                     print(
                         f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {tst_score:.4f}",
@@ -243,7 +243,7 @@ def test(pool="size",
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
-                                          loss_fn=loss_fn)
+                                          loss_fn=loss_fn, device=config.device)
                     tst_score = max(score, tst_score)
                     print(
                         f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {score:.4f}",
@@ -252,7 +252,7 @@ def test(pool="size",
                     early_stop += 1
                     if i % 10 == 0:
                         print(
-                            f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn)[0]:.4f}",
+                            f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn, device=config.device)[0]:.4f}",
                             flush=True)
             if val_score >= 1 - 1e-5:
                 early_stop += 1
