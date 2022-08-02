@@ -161,7 +161,8 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         "mean": models.MeanPool,
         "max": models.MaxPool,
         "sum": models.AddPool,
-        "size": models.SizePool
+        "size": models.SizePool,
+        "sort": models.SortPool
     }
     if pool1 in pool_fn_fn:
         pool_fn1 = pool_fn_fn[pool1]()
@@ -174,7 +175,8 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         raise NotImplementedError
 
     gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]),
-                       torch.nn.ModuleList([pool_fn1, pool_fn2])).to(config.device)
+                       torch.nn.ModuleList([pool_fn1, pool_fn2]), hidden_dim, output_channels, conv_layer, pool1,
+                       pool2).to(config.device)
     return gnn
 
 

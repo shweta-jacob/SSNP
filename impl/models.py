@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn import Conv1d, MaxPool1d
 from torch.nn.utils.rnn import pad_sequence
-from torch_geometric.nn import GCNConv
+from torch_geometric.nn import GCNConv, global_sort_pool
 from torch_geometric.nn.norm import GraphNorm, GraphSizeNorm
 from torch_geometric.nn.glob.glob import global_mean_pool, global_add_pool, global_max_pool
 from .utils import pad2batch
@@ -14,6 +15,7 @@ class Seq(nn.Module):
     Args: 
         modlist an iterable of modules to add.
     '''
+
     def __init__(self, modlist):
         super().__init__()
         self.modlist = nn.ModuleList(modlist)
@@ -33,6 +35,7 @@ class MLP(nn.Module):
         activation: activation function.
         gn: whether to use GraphNorm layer.
     '''
+
     def __init__(self,
                  input_channels: int,
                  hidden_channels: int,
@@ -91,7 +94,7 @@ def buildAdj(edge_index, edge_weight, n_node: int, aggr: str):
     adj = torch.sparse_coo_tensor(edge_index,
                                   edge_weight,
                                   size=(n_node, n_node))
-    deg = torch.sparse.sum(adj, dim=(1, )).to_dense().flatten()
+    deg = torch.sparse.sum(adj, dim=(1,)).to_dense().flatten()
     deg[deg < 0.5] += 1.0
     if aggr == "mean":
         deg = 1.0 / deg
@@ -120,6 +123,7 @@ class GLASSConv(torch.nn.Module):
         aggr: the aggregation method.
         z_ratio: the ratio to mix the transformed features.
     '''
+
     def __init__(self,
                  in_channels: int,
                  out_channels: int,
@@ -172,6 +176,7 @@ class EmbZGConv(nn.Module):
         gn: whether to use GraphNorm.
         jk: whether to use Jumping Knowledge Network.
     '''
+
     def __init__(self,
                  hidden_channels,
                  output_channels,
@@ -262,6 +267,7 @@ class PoolModule(nn.Module):
         trans_fn: module to transfer node embeddings.
         pool_fn: module to pool node embeddings like global_add_pool.
     '''
+
     def __init__(self, pool_fn, trans_fn=None):
         super().__init__()
         self.pool_fn = pool_fn
@@ -301,6 +307,16 @@ class SizePool(AddPool):
         x = GraphSizeNorm()(x, batch)
         return self.pool_fn(x, batch)
 
+class SortPool(nn.Module):
+    def __init__(self, trans_fn=None):
+        super().__init__()
+        self.trans_fn = trans_fn
+
+    def forward(self, x, batch, k):
+        if self.trans_fn is not None:
+            x = self.trans_fn(x)
+        return global_sort_pool(x, batch, k)
+
 
 class GLASS(nn.Module):
     '''
@@ -309,12 +325,48 @@ class GLASS(nn.Module):
         preds and pools are ModuleList containing the same number of MLPs and Pooling layers.
         preds[id] and pools[id] is used to predict the id-th target. Can be used for SSL.
     '''
+
     def __init__(self, conv: EmbZGConv, preds: nn.ModuleList,
-                 pools: nn.ModuleList):
+                 pools: nn.ModuleList, hidden_dim, output_channels, conv_layer, pool1,
+                 pool2):
         super().__init__()
         self.conv = conv
         self.preds = preds
         self.pools = pools
+        self.pool1 = pool1
+        self.pool2 = pool2
+        if pool1 == 'sort' and pool2 == 'sort':
+            self.k = int(30)
+            conv1d_channels = [32, 32]
+            total_latent_dim = hidden_dim * conv_layer
+            conv1d_kws = [total_latent_dim, 5]
+            self.conv1 = Conv1d(1, conv1d_channels[0], conv1d_kws[0],
+                                conv1d_kws[0])
+            self.maxpool1d = MaxPool1d(2, 2)
+            self.conv2 = Conv1d(conv1d_channels[0], conv1d_channels[1],
+                                conv1d_kws[1], 1)
+            dense_dim = int((self.k - 2) / 2 + 1)
+
+            dense_dim = (dense_dim - conv1d_kws[1] + 1) * conv1d_channels[1]
+            self.preds = torch.nn.ModuleList([MLP(input_channels=2 * dense_dim,
+                                                  hidden_channels=hidden_dim, output_channels=output_channels,
+                                                  num_layers=3)])
+        elif pool1 == 'sort' or pool2 == 'sort':
+            self.k = int(30)
+            conv1d_channels = [32, 32]
+            total_latent_dim = hidden_dim * conv_layer
+            conv1d_kws = [total_latent_dim, 5]
+            self.conv1 = Conv1d(1, conv1d_channels[0], conv1d_kws[0],
+                                conv1d_kws[0])
+            self.maxpool1d = MaxPool1d(2, 2)
+            self.conv2 = Conv1d(conv1d_channels[0], conv1d_channels[1],
+                                conv1d_kws[1], 1)
+            dense_dim = int((self.k - 2) / 2 + 1)
+
+            dense_dim = (dense_dim - conv1d_kws[1] + 1) * conv1d_channels[1]
+            self.preds = torch.nn.ModuleList([MLP(input_channels=dense_dim + (hidden_dim * conv_layer),
+                                                  hidden_channels=hidden_dim, output_channels=output_channels,
+                                                  num_layers=3)])
 
     def NodeEmb(self, x, edge_index, edge_weight):
         embs = []
@@ -335,11 +387,27 @@ class GLASS(nn.Module):
             complement.append(subg_comp.to(device))
         complement = pad_sequence(complement, batch_first=True, padding_value=-1).to(torch.int64)
         batch_comp, pos_comp = pad2batch(complement)
-        emb_subG = emb[pos]
+        emb_subg = emb[pos]
         emb_comp = emb[pos_comp]
-        emb_subG = pool1(emb_subG, batch)
-        emb_comp = pool2(emb_comp, batch_comp)
-        emb = torch.cat([emb_subG, emb_comp], dim=-1)
+        if self.pool1 != 'sort':
+            emb_subg = pool1(emb_subg, batch)
+        else:
+            emb_subg = pool1(emb_subg, batch, self.k)
+            emb_subg = emb_subg.unsqueeze(1)  # [num_graphs, 1, k * hidden]
+            emb_subg = F.relu(self.conv1(emb_subg))
+            emb_subg = self.maxpool1d(emb_subg)
+            emb_subg = F.relu(self.conv2(emb_subg))
+            emb_subg = emb_subg.view(emb_subg.size(0), -1)
+        if self.pool2 != 'sort':
+            emb_comp = pool2(emb_comp, batch_comp)
+        else:
+            emb_comp = pool2(emb_comp, batch_comp, self.k)
+            emb_comp = emb_comp.unsqueeze(1)  # [num_graphs, 1, k * hidden]
+            emb_comp = F.relu(self.conv1(emb_comp))
+            emb_comp = self.maxpool1d(emb_comp)
+            emb_comp = F.relu(self.conv2(emb_comp))
+            emb_comp = emb_comp.view(emb_comp.size(0), -1)
+        emb = torch.cat([emb_subg, emb_comp], dim=-1)
         return emb
 
     def forward(self, x, edge_index, edge_weight, subG_node, device=-1, id=0):
@@ -358,6 +426,7 @@ class MyGCNConv(torch.nn.Module):
     Args:
         aggr: the aggregation method.
     '''
+
     def __init__(self,
                  in_channels: int,
                  out_channels: int,
@@ -398,6 +467,7 @@ class EmbGConv(torch.nn.Module):
         gn: whether to use GraphNorm.
         jk: whether to use Jumping Knowledge Network.
     '''
+
     def __init__(self,
                  input_channels: int,
                  hidden_channels: int,
@@ -476,6 +546,7 @@ class EdgeGNN(nn.Module):
         preds and pools are ModuleList containing the same number of MLPs and Pooling layers.
         preds[id] and pools[id] is used to predict the id-th target. Can be used for SSL.
     '''
+
     def __init__(self, conv, preds: nn.ModuleList, pools: nn.ModuleList):
         super().__init__()
         self.conv = conv
