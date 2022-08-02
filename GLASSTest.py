@@ -154,8 +154,8 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
                          map_location=torch.device('cpu')).detach()
         conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
 
-    mlp = MLP(input_channels=2 * hidden_dim * (conv_layer), hidden_channels=hidden_dim, output_channels=output_channels,
-              num_layers=3)
+    mlp = MLP(input_channels=2 * hidden_dim * (conv_layer), hidden_channels=2 * hidden_dim, output_channels=output_channels,
+              num_layers=4)
 
     pool_fn_fn = {
         "mean": models.MeanPool,

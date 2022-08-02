@@ -349,8 +349,8 @@ class GLASS(nn.Module):
 
             dense_dim = (dense_dim - conv1d_kws[1] + 1) * conv1d_channels[1]
             self.preds = torch.nn.ModuleList([MLP(input_channels=2 * dense_dim,
-                                                  hidden_channels=hidden_dim, output_channels=output_channels,
-                                                  num_layers=3)])
+                                                  hidden_channels=2*hidden_dim, output_channels=output_channels,
+                                                  num_layers=4)])
         elif pool1 == 'sort' or pool2 == 'sort':
             self.k = int(30)
             conv1d_channels = [32, 32]
@@ -365,8 +365,8 @@ class GLASS(nn.Module):
 
             dense_dim = (dense_dim - conv1d_kws[1] + 1) * conv1d_channels[1]
             self.preds = torch.nn.ModuleList([MLP(input_channels=dense_dim + (hidden_dim * conv_layer),
-                                                  hidden_channels=hidden_dim, output_channels=output_channels,
-                                                  num_layers=3)])
+                                                  hidden_channels=2*hidden_dim, output_channels=output_channels,
+                                                  num_layers=4)])
 
     def NodeEmb(self, x, edge_index, edge_weight):
         embs = []
