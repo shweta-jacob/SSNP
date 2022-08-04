@@ -5,5 +5,5 @@ dropout: 0.0
 hidden_dim: 32
 lr: 0.001
 pool1: sum
-pool2: sum
+pool2: mean
 z_ratio: 0.9

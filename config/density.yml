@@ -4,7 +4,7 @@ conv_layer: 3
 dropout: 0.0
 hidden_dim: 32
 lr: 0.001
-pool1: size
-pool2: size
+pool1: mean
+pool2: mean
 resi: 0.2
 z_ratio: 0.95
