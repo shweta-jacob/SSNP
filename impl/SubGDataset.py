@@ -12,19 +12,21 @@ class GDataset:
             For example, [[0, 1, 2], [6, 7, -1]] means two subgraphs containing nodes 0, 1, 2 and 6, 7 respectively.
         y : the target of subgraphs.
     '''
-    def __init__(self, x, edge_index, edge_attr, pos, y):
-        self.x=x
-        self.edge_index=edge_index
-        self.edge_attr=edge_attr
-        self.y=y
-        self.pos=pos
+
+    def __init__(self, x, edge_index, edge_attr, pos, y, comp):
+        self.x = x
+        self.edge_index = edge_index
+        self.edge_attr = edge_attr
+        self.y = y
+        self.pos = pos
         self.num_nodes = x.shape[0]
+        self.comp = comp
 
     def __len__(self):
         return self.pos.shape[0]
 
     def __getitem__(self, idx):
-        return self.pos[idx], self.y[idx]
+        return self.pos[idx], self.y[idx], self.comp[idx]
 
     def to(self, device):
         self.x = self.x.to(device)
@@ -32,6 +34,7 @@ class GDataset:
         self.edge_attr = self.edge_attr.to(device)
         self.pos = self.pos.to(device)
         self.y = self.y.to(device)
+        self.comp = self.comp.to(device)
         return self
 
 
@@ -59,6 +62,9 @@ class GDataloader(DataLoader):
     def get_pos(self):
         return self.Gdataset.pos
 
+    def get_comp(self):
+        return self.Gdataset.comp
+
     def get_y(self):
         return self.Gdataset.y
 
@@ -69,7 +75,7 @@ class GDataloader(DataLoader):
     def __next__(self):
         perm = next(self.iter)
         return self.get_x(), self.get_ei(), self.get_ea(), self.get_pos(
-        )[perm], self.get_y()[perm]
+        )[perm], self.get_comp()[perm], self.get_y()[perm],
 
 
 class ZGDataloader(GDataloader):
