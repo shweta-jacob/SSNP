@@ -98,7 +98,7 @@ def neighbors(fringe, A, outgoing=True):
 
 
 def extract_neighborhood(dataset_split):
-    edge_weight = dataset_split[2]
+    edge_weight = Tensor.cpu(dataset_split[2])
     A = ssp.csr_matrix(
         (edge_weight, (Tensor.cpu(dataset_split[1][0]), Tensor.cpu(dataset_split[1][1]))),
         shape=(dataset_split[0].shape[0], dataset_split[0].shape[0])
