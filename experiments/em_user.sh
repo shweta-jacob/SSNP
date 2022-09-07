@@ -36,7 +36,7 @@ python GLASSTest.py --use_nodeid --use_seed --repeat 10 --num_hops 4 --pool1 siz
 
 python GLASSTest.py --use_nodeid --use_seed --repeat 10 --num_hops 4 --pool1 size --pool2 sum --dataset em_user --device 3
 
-python GLASSTest.py --use_nodeid --use_seed --repeat 10 --num_hops 4 --pool1 size --pool2 smaxort --dataset em_user --device 3
+python GLASSTest.py --use_nodeid --use_seed --repeat 10 --num_hops 4 --pool1 size --pool2 max --dataset em_user --device 3
 
 python GLASSTest.py --use_nodeid --use_seed --repeat 10 --num_hops 4 --pool1 size --pool2 sort --dataset em_user --device 3
 

@@ -36,7 +36,7 @@ python GLASSTest.py --use_nodeid --use_seed --repeat 10 --num_hops 4 --pool1 siz
 
 python GLASSTest.py --use_nodeid --use_seed --repeat 10 --num_hops 4 --pool1 size --pool2 sum --dataset ppi_bp --device 0
 
-python GLASSTest.py --use_nodeid --use_seed --repeat 10 --num_hops 4 --pool1 size --pool2 smaxort --dataset ppi_bp --device 0
+python GLASSTest.py --use_nodeid --use_seed --repeat 10 --num_hops 4 --pool1 size --pool2 max --dataset ppi_bp --device 0
 
 python GLASSTest.py --use_nodeid --use_seed --repeat 10 --num_hops 4 --pool1 size --pool2 sort --dataset ppi_bp --device 0
 
