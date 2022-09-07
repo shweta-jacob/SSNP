@@ -21,6 +21,8 @@ from impl.models import MLP
 parser = argparse.ArgumentParser(description='')
 # Dataset settings
 parser.add_argument('--dataset', type=str, default='ppi_bp')
+parser.add_argument('--pool1', type=str, default='mean')
+parser.add_argument('--pool2', type=str, default='mean')
 # Node feature settings. 
 # deg means use node degree. one means use homogeneous embeddings.
 # nodeid means use pretrained node embeddings in ./Emb
@@ -337,6 +339,8 @@ print(args)
 # read configuration
 with open(f"config/{args.dataset}.yml") as f:
     params = yaml.safe_load(f)
+
+params.update({'pool1': args.pool1, 'pool2': args.pool2})
 
 print("params", params, flush=True)
 split()
