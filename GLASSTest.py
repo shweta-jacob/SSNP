@@ -130,6 +130,7 @@ def extract_neighborhood(dataset_split):
     comp = pad_sequence(comp, batch_first=True, padding_value=-1).to(torch.int64)
     return comp.to(config.device)
 
+
 def split_GNN_seg(trn_dataset, val_dataset, tst_dataset):
     def todata(x, edge_index, edge_attr, centre, hop, y):
         node, edge, inv, edge_mask = k_hop_subgraph(centre,
@@ -160,8 +161,11 @@ def split_GNN_seg(trn_dataset, val_dataset, tst_dataset):
 
     global sub_trn_dataset, sub_val_dataset, sub_tst_dataset, comp_trn_dataset, comp_val_dataset, comp_tst_dataset, seg_loader_fn, seg_tloader_fn
 
+    print("Creating train GNN seg dataset")
     sub_trn_dataset = GsDataset(tosubdatalist(trn_dataset, 0))
+    print("Creating val GNN seg dataset")
     sub_val_dataset = GsDataset(tosubdatalist(val_dataset, 0))
+    print("Creating test GNN seg dataset")
     sub_tst_dataset = GsDataset(tosubdatalist(tst_dataset, 0))
 
     # comp_trn_dataset = GsDataset(tocompdatalist(trn_dataset, 0))
@@ -176,6 +180,7 @@ def split_GNN_seg(trn_dataset, val_dataset, tst_dataset):
 
     def seg_tloader_fn(ds, bs):
         return tfunc(ds, bs, False, False)
+
 
 def split():
     '''
@@ -205,9 +210,13 @@ def split():
     valid_comp = extract_neighborhood(valid)
     test_comp = extract_neighborhood(test)
 
+    print("Creating Plain GNN dataset")
+
     trn_dataset = SubGDataset.GDataset(*train, train_comp)
     val_dataset = SubGDataset.GDataset(*valid, valid_comp)
     tst_dataset = SubGDataset.GDataset(*test, test_comp)
+
+    print("Creating GNN seg dataset")
 
     split_GNN_seg(trn_dataset=trn_dataset, val_dataset=val_dataset, tst_dataset=tst_dataset)
     # choice of dataloader
@@ -244,6 +253,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         z_ratio: see GLASSConv in impl/model.py. Z_ratio in [0.5, 1].
         aggr: aggregation method. mean, sum, or gcn. 
     '''
+    print("Creating model")
     conv = models.EmbZGConv(hidden_dim,
                             hidden_dim,
                             conv_layer,
@@ -274,7 +284,6 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
     #                   conv=functools.partial(GCNConv, add_self_loops=False),
     #                   activation=nn.ELU(inplace=True),
     #                   dropout=dropout)
-
 
     # use pretrained node embeddings.
     if args.use_nodeid:
@@ -332,6 +341,7 @@ def test(pool1="size",
         resi: the lr reduce factor of ReduceLROnPlateau.
     '''
 
+    batch_size = len(tst_dataset)
     # we set batch_size = tst_dataset.y.shape[0] // num_div.
     num_div = tst_dataset.y.shape[0] / batch_size
     # we use num_div to calculate the number of iteration per epoch and count the number of iteration.
@@ -365,22 +375,21 @@ def test(pool1="size",
         tst_score = 0
         early_stop = 0
         trn_time = []
-        for i in range(300):
+        for i in range(500):
             t1 = time.time()
             loss = train.train(optimizer, gnn, trn_loader, sub_trn_loader, loss_fn,
                                device=config.device)
             trn_time.append(time.time() - t1)
             scd.step(loss)
 
-            if i >= 100 / num_div:
+            if i % 5 == 0:
                 score, _ = train.test(gnn,
                                       val_loader,
                                       sub_val_loader,
                                       score_fn,
                                       loss_fn=loss_fn, device=config.device)
-
+                early_stop += 1
                 if score > val_score:
-                    early_stop = 0
                     val_score = score
                     score, _ = train.test(gnn,
                                           tst_loader,
@@ -391,6 +400,7 @@ def test(pool1="size",
                     print(
                         f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {tst_score:.4f}",
                         flush=True)
+                    early_stop /= 2
                 elif score >= val_score - 1e-5:
                     score, _ = train.test(gnn,
                                           tst_loader,
@@ -401,16 +411,13 @@ def test(pool1="size",
                     print(
                         f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {score:.4f}",
                         flush=True)
+                    early_stop /= 2
                 else:
-                    early_stop += 1
-                    if i % 10 == 0:
-                        print(
-                            f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, sub_tst_loader, score_fn, loss_fn=loss_fn, device=config.device)[0]:.4f}",
-                            flush=True)
-            if val_score >= 1 - 1e-5:
-                early_stop += 1
-            if early_stop > 100 / num_div:
-                break
+                    print(
+                        f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, sub_tst_loader, score_fn, loss_fn=loss_fn, device=config.device)[0]:.4f}",
+                        flush=True)
+                if early_stop > 10:
+                    break
         print(
             f"end: epoch {i + 1}, train time {sum(trn_time):.2f} s, val {val_score:.3f}, tst {tst_score:.3f}",
             flush=True)
