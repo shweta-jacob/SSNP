@@ -329,7 +329,7 @@ class GLASS(nn.Module):
         preds[id] and pools[id] is used to predict the id-th target. Can be used for SSL.
     '''
 
-    def __init__(self, conv: EmbZGConv, sub_gnn: GNN, comp_gnn: GNN, preds: nn.ModuleList,
+    def __init__(self, conv: EmbZGConv, sub_gnn: GNN, preds: nn.ModuleList,
                  pools: nn.ModuleList, hidden_dim, output_channels, conv_layer, pool1,
                  pool2):
         super().__init__()
@@ -339,7 +339,7 @@ class GLASS(nn.Module):
         self.pool1 = pool1
         self.pool2 = pool2
         self.sub_gnn = sub_gnn
-        self.comp_gnn = comp_gnn
+        # self.comp_gnn = comp_gnn
         if pool1 == 'sort' and pool2 == 'sort':
             self.k = int(30)
             conv1d_channels = [32, 32]
@@ -386,8 +386,8 @@ class GLASS(nn.Module):
     def SubEmb(self, x, edge_index, edge_weight, sub_node):
         return self.sub_gnn(x, edge_index, edge_weight, sub_node)
 
-    def CompEmb(self, x, edge_index, edge_weight, comp_node):
-        return self.comp_gnn(x, edge_index, edge_weight, comp_node)
+    # def CompEmb(self, x, edge_index, edge_weight, comp_node):
+    #     return self.comp_gnn(x, edge_index, edge_weight, comp_node)
 
     def Pool(self, emb, subG_node, pool1, pool2, subG_comp):
         batch, pos = pad2batch(subG_node)
@@ -417,12 +417,12 @@ class GLASS(nn.Module):
         return emb
 
     def forward(self, x, edge_index, edge_weight, subG_node, subG_comp, sub_x, sub_edge_index, sub_edge_weight,
-                sub_node, comp_x, comp_edge_index, comp_edge_weight, comp_node, id=0):
+                sub_node, id=0):
         plain_emb = self.NodeEmb(x, edge_index, edge_weight)
         plain_emb = self.Pool(plain_emb, subG_node, self.pools[0], self.pools[1], subG_comp)
         sub_emb = self.SubEmb(sub_x, sub_edge_index, sub_edge_weight, sub_node)
-        comp_emb = self.CompEmb(comp_x, comp_edge_index, comp_edge_weight, comp_node)
-        final_emb = torch.cat([plain_emb, sub_emb, comp_emb], dim=-1)
+        # comp_emb = self.CompEmb(comp_x, comp_edge_index, comp_edge_weight, comp_node)
+        final_emb = torch.cat([plain_emb, sub_emb], dim=-1)
         return self.preds[id](final_emb)
 
 
