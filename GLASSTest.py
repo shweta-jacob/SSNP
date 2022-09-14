@@ -202,9 +202,12 @@ def split():
     max_deg = torch.max(baseG.x)
     baseG.to(config.device)
     # split data
+    print("Splitting data")
     train = baseG.get_split("train")
     valid = baseG.get_split("valid")
     test = baseG.get_split("test")
+
+    print("Extracting complement nodes")
 
     train_comp = extract_neighborhood(train)
     valid_comp = extract_neighborhood(valid)
