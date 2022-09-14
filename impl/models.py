@@ -6,6 +6,8 @@ from torch.nn.utils.rnn import pad_sequence
 from torch_geometric.nn import GCNConv, global_sort_pool
 from torch_geometric.nn.norm import GraphNorm, GraphSizeNorm
 from torch_geometric.nn.glob.glob import global_mean_pool, global_add_pool, global_max_pool
+
+from GNNSeg import GNN
 from .utils import pad2batch
 
 
@@ -307,6 +309,7 @@ class SizePool(AddPool):
         x = GraphSizeNorm()(x, batch)
         return self.pool_fn(x, batch)
 
+
 class SortPool(nn.Module):
     def __init__(self, trans_fn=None):
         super().__init__()
@@ -326,7 +329,7 @@ class GLASS(nn.Module):
         preds[id] and pools[id] is used to predict the id-th target. Can be used for SSL.
     '''
 
-    def __init__(self, conv: EmbZGConv, preds: nn.ModuleList,
+    def __init__(self, conv: EmbZGConv, sub_gnn: GNN, comp_gnn: GNN, preds: nn.ModuleList,
                  pools: nn.ModuleList, hidden_dim, output_channels, conv_layer, pool1,
                  pool2):
         super().__init__()
@@ -335,6 +338,8 @@ class GLASS(nn.Module):
         self.pools = pools
         self.pool1 = pool1
         self.pool2 = pool2
+        self.sub_gnn = sub_gnn
+        self.comp_gnn = comp_gnn
         if pool1 == 'sort' and pool2 == 'sort':
             self.k = int(30)
             conv1d_channels = [32, 32]
@@ -349,7 +354,7 @@ class GLASS(nn.Module):
 
             dense_dim = (dense_dim - conv1d_kws[1] + 1) * conv1d_channels[1]
             self.preds = torch.nn.ModuleList([MLP(input_channels=2 * dense_dim,
-                                                  hidden_channels=2*hidden_dim, output_channels=output_channels,
+                                                  hidden_channels=2 * hidden_dim, output_channels=output_channels,
                                                   num_layers=4)])
         elif pool1 == 'sort' or pool2 == 'sort':
             self.k = int(30)
@@ -365,7 +370,7 @@ class GLASS(nn.Module):
 
             dense_dim = (dense_dim - conv1d_kws[1] + 1) * conv1d_channels[1]
             self.preds = torch.nn.ModuleList([MLP(input_channels=dense_dim + (hidden_dim * conv_layer),
-                                                  hidden_channels=2*hidden_dim, output_channels=output_channels,
+                                                  hidden_channels=2 * hidden_dim, output_channels=output_channels,
                                                   num_layers=4)])
 
     def NodeEmb(self, x, edge_index, edge_weight):
@@ -378,14 +383,15 @@ class GLASS(nn.Module):
         emb = torch.mean(emb, dim=1)
         return emb
 
-    def Pool(self, emb, subG_node, pool1, pool2, subG_comp, num_nodes, device):
+    def SubEmb(self, x, edge_index, edge_weight, sub_node):
+        return self.sub_gnn(x, edge_index, edge_weight, sub_node)
+
+    def CompEmb(self, x, edge_index, edge_weight, comp_node):
+        return self.comp_gnn(x, edge_index, edge_weight, comp_node)
+
+    def Pool(self, emb, subG_node, pool1, pool2, subG_comp):
         batch, pos = pad2batch(subG_node)
         complement = subG_comp
-        # for subgraph in subG_node:
-        #     subgraph = list(filter(lambda node: node != -1, subgraph.tolist()))
-        #     subg_comp = torch.Tensor(list(set(range(num_nodes)).difference(subgraph)))
-        #     complement.append(subg_comp.to(device))
-        # complement = pad_sequence(complement, batch_first=True, padding_value=-1).to(torch.int64)
         batch_comp, pos_comp = pad2batch(complement)
         emb_subg = emb[pos]
         emb_comp = emb[pos_comp]
@@ -410,11 +416,14 @@ class GLASS(nn.Module):
         emb = torch.cat([emb_subg, emb_comp], dim=-1)
         return emb
 
-    def forward(self, x, edge_index, edge_weight, subG_node, subG_comp, device=-1, id=0):
-        num_nodes = len(x)
-        emb = self.NodeEmb(x, edge_index, edge_weight)
-        emb = self.Pool(emb, subG_node, self.pools[0], self.pools[1], subG_comp, num_nodes, device)
-        return self.preds[id](emb)
+    def forward(self, x, edge_index, edge_weight, subG_node, subG_comp, sub_x, sub_edge_index, sub_edge_weight,
+                sub_node, comp_x, comp_edge_index, comp_edge_weight, comp_node, id=0):
+        plain_emb = self.NodeEmb(x, edge_index, edge_weight)
+        plain_emb = self.Pool(plain_emb, subG_node, self.pools[0], self.pools[1], subG_comp)
+        sub_emb = self.SubEmb(sub_x, sub_edge_index, sub_edge_weight, sub_node)
+        comp_emb = self.CompEmb(comp_x, comp_edge_index, comp_edge_weight, comp_node)
+        final_emb = torch.cat([plain_emb, sub_emb, comp_emb], dim=-1)
+        return self.preds[id](final_emb)
 
 
 # models used for producing node embeddings.

@@ -1,15 +1,20 @@
 import torch
 
 
-def train(optimizer, model, dataloader, loss_fn, device):
+def train(optimizer, model, dataloader, sub_loader, comp_loader, loss_fn, device):
     '''
     Train models in an epoch.
     '''
     model.train()
+
+    iterator1 = iter(sub_loader)
+    iterator2 = iter(comp_loader)
     total_loss = []
     for batch in dataloader:
         optimizer.zero_grad()
-        pred = model(*batch[:-1], device=device, id=0)
+        first = next(iterator1)
+        second = next(iterator2)
+        pred = model(*batch[:-1], *first[:-1], *second[:-1], id=0)
         loss = loss_fn(pred, batch[-1])
         loss.backward()
         total_loss.append(loss.detach().item())
@@ -18,15 +23,20 @@ def train(optimizer, model, dataloader, loss_fn, device):
 
 
 @torch.no_grad()
-def test(model, dataloader, metrics, loss_fn, device):
+def test(model, dataloader, sub_loader, comp_loader, metrics, loss_fn, device):
     '''
     Test models either on validation dataset or test dataset.
     '''
     model.eval()
     preds = []
     ys = []
+    iterator1 = iter(sub_loader)
+    iterator2 = iter(comp_loader)
+
     for batch in dataloader:
-        pred = model(*batch[:-1], device=device)
+        first = next(iterator1)
+        second = next(iterator2)
+        pred = model(*batch[:-1], *first[:-1], *second[:-1])
         preds.append(pred)
         ys.append(batch[-1])
     pred = torch.cat(preds, dim=0)
