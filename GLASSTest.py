@@ -221,11 +221,11 @@ def test(pool1="size",
         print(f"repeat {repeat}")
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio,
                          aggr)
-        print("Creating loaders")
-        trn_loader = loader_fn(trn_dataset, batch_size)
-        val_loader = tloader_fn(val_dataset, batch_size)
-        tst_loader = tloader_fn(tst_dataset, batch_size)
-        print("Finished creating loaders")
+        # print("Creating loaders")
+        # trn_loader = loader_fn(trn_dataset, batch_size)
+        # val_loader = tloader_fn(val_dataset, batch_size)
+        # tst_loader = tloader_fn(tst_dataset, batch_size)
+        # print("Finished creating loaders")
         optimizer = Adam(gnn.parameters(), lr=lr)
         scd = lr_scheduler.ReduceLROnPlateau(optimizer,
                                              factor=resi,
@@ -238,13 +238,13 @@ def test(pool1="size",
         for i in range(300):
             print(f'Epoch {i + 1}')
             t1 = time.time()
-            loss = train.train(optimizer, gnn, trn_loader, loss_fn, device=config.device)
+            loss = train.train(optimizer, gnn, trn_dataset, loss_fn, device=config.device)
             trn_time.append(time.time() - t1)
             scd.step(loss)
 
             if i >= 100 / num_div:
                 score, _ = train.test(gnn,
-                                      val_loader,
+                                      val_dataset,
                                       score_fn,
                                       loss_fn=loss_fn, device=config.device)
 
@@ -252,7 +252,7 @@ def test(pool1="size",
                     early_stop = 0
                     val_score = score
                     score, _ = train.test(gnn,
-                                          tst_loader,
+                                          tst_dataset,
                                           score_fn,
                                           loss_fn=loss_fn, device=config.device)
                     tst_score = score
@@ -261,7 +261,7 @@ def test(pool1="size",
                         flush=True)
                 elif score >= val_score - 1e-5:
                     score, _ = train.test(gnn,
-                                          tst_loader,
+                                          tst_dataset,
                                           score_fn,
                                           loss_fn=loss_fn, device=config.device)
                     tst_score = max(score, tst_score)
@@ -272,7 +272,7 @@ def test(pool1="size",
                     early_stop += 1
                     if i % 10 == 0:
                         print(
-                            f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn, device=config.device)[0]:.4f}",
+                            f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_dataset, score_fn, loss_fn=loss_fn, device=config.device)[0]:.4f}",
                             flush=True)
             if val_score >= 1 - 1e-5:
                 early_stop += 1
@@ -286,7 +286,7 @@ def test(pool1="size",
         time_taken = end_time - start_time
         print(f'Time taken for run {repeat + 1}: {time_taken}')
     print(
-        f"average {np.average(outs):.3f} error {np.std(outs) / np.sqrt(len(outs)):.3f}"
+        f"average {np.average(outs):.3f} ± {np.std(outs) / np.sqrt(len(outs)):.3f}"
     )
 
 
