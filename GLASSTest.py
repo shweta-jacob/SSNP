@@ -236,7 +236,7 @@ def test(pool1="size",
         trn_time = []
         print("Start Training")
         for i in range(300):
-            print(f'Epoch {i+1}')
+            print(f'Epoch {i + 1}')
             t1 = time.time()
             loss = train.train(optimizer, gnn, trn_loader, loss_fn, device=config.device)
             trn_time.append(time.time() - t1)
@@ -284,7 +284,7 @@ def test(pool1="size",
         end_time = time.time()
         outs.append(tst_score)
         time_taken = end_time - start_time
-        print(f'Time taken: {time_taken}')
+        print(f'Time taken for run {repeat + 1}: {time_taken}')
     print(
         f"average {np.average(outs):.3f} error {np.std(outs) / np.sqrt(len(outs)):.3f}"
     )
@@ -296,5 +296,8 @@ with open(f"config/{args.dataset}.yml") as f:
     params = yaml.safe_load(f)
 
 print("params", params, flush=True)
+exp_start_time = time.time()
 split()
 test(**(params))
+exp_end_time = time.time()
+print(f'Time taken for experiment: {exp_end_time - exp_start_time}')
