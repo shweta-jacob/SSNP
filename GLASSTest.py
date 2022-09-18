@@ -134,7 +134,12 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         z_ratio: see GLASSConv in impl/model.py. Z_ratio in [0.5, 1].
         aggr: aggregation method. mean, sum, or gcn. 
     '''
-    conv = models.EmbZGConv(hidden_dim,
+    print("Creating model")
+    input_channels = hidden_dim
+    if args.use_nodeid:
+        input_channels = 64
+    conv = models.EmbZGConv(input_channels,
+                            hidden_dim,
                             hidden_dim,
                             conv_layer,
                             max_deg=max_deg,
@@ -149,12 +154,14 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
 
     # use pretrained node embeddings.
     if args.use_nodeid:
-        print("load ", f"./Emb/{args.dataset}_{hidden_dim}.pt")
-        emb = torch.load(f"./Emb/{args.dataset}_{hidden_dim}.pt",
+        print("load ", f"./Emb/{args.dataset}_{64}.pt")
+        emb = torch.load(f"./Emb/{args.dataset}_{64}.pt",
                          map_location=torch.device('cpu')).detach()
+        print("Finished loading pretrained embeddings")
         conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
 
-    mlp = MLP(input_channels=2 * hidden_dim * (conv_layer), hidden_channels=2 * hidden_dim, output_channels=output_channels,
+    mlp = MLP(input_channels=2 * hidden_dim * (conv_layer), hidden_channels=2 * hidden_dim,
+              output_channels=output_channels,
               num_layers=4)
 
     pool_fn_fn = {
@@ -177,6 +184,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
     gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]),
                        torch.nn.ModuleList([pool_fn1, pool_fn2]), hidden_dim, output_channels, conv_layer, pool1,
                        pool2).to(config.device)
+    print("Created model")
     return gnn
 
 
@@ -213,9 +221,11 @@ def test(pool1="size",
         print(f"repeat {repeat}")
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio,
                          aggr)
+        print("Creating loaders")
         trn_loader = loader_fn(trn_dataset, batch_size)
         val_loader = tloader_fn(val_dataset, batch_size)
         tst_loader = tloader_fn(tst_dataset, batch_size)
+        print("Finished creating loaders")
         optimizer = Adam(gnn.parameters(), lr=lr)
         scd = lr_scheduler.ReduceLROnPlateau(optimizer,
                                              factor=resi,
@@ -224,7 +234,9 @@ def test(pool1="size",
         tst_score = 0
         early_stop = 0
         trn_time = []
+        print("Start Training")
         for i in range(300):
+            print(f'Epoch {i+1}')
             t1 = time.time()
             loss = train.train(optimizer, gnn, trn_loader, loss_fn, device=config.device)
             trn_time.append(time.time() - t1)
