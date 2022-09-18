@@ -2,7 +2,7 @@ aggr: sum
 batch_size: 20
 conv_layer: 3
 dropout: 0.3
-hidden_dim: 32
+hidden_dim: 16
 lr: 0.01
 pool1: mean
 pool2: mean
