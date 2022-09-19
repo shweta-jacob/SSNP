@@ -138,7 +138,21 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
     input_channels = hidden_dim
     if args.use_nodeid:
         input_channels = 64
-    conv = models.EmbZGConv(input_channels,
+    sub_conv = models.EmbZGConv(input_channels,
+                            hidden_dim,
+                            hidden_dim,
+                            conv_layer,
+                            max_deg=max_deg,
+                            activation=nn.ELU(inplace=True),
+                            jk=jk,
+                            dropout=dropout,
+                            conv=functools.partial(models.GLASSConv,
+                                                   aggr=aggr,
+                                                   z_ratio=z_ratio,
+                                                   dropout=dropout),
+                            gn=True)
+
+    comp_conv = models.EmbZGConv(input_channels,
                             hidden_dim,
                             hidden_dim,
                             conv_layer,
@@ -158,7 +172,8 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         emb = torch.load(f"./Emb/{args.dataset}_{64}.pt",
                          map_location=torch.device('cpu')).detach()
         print("Finished loading pretrained embeddings")
-        conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
+        sub_conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
+        comp_conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
 
     mlp = MLP(input_channels=2 * hidden_dim * (conv_layer), hidden_channels=2 * hidden_dim,
               output_channels=output_channels,
@@ -181,7 +196,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
     else:
         raise NotImplementedError
 
-    gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]),
+    gnn = models.GLASS(sub_conv, comp_conv, torch.nn.ModuleList([mlp]),
                        torch.nn.ModuleList([pool_fn1, pool_fn2]), hidden_dim, output_channels, conv_layer, pool1,
                        pool2).to(config.device)
     print("Created model")

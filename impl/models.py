@@ -332,11 +332,12 @@ class GLASS(nn.Module):
         preds[id] and pools[id] is used to predict the id-th target. Can be used for SSL.
     '''
 
-    def __init__(self, conv: EmbZGConv, preds: nn.ModuleList,
+    def __init__(self, sub_conv: EmbZGConv, comp_conv: EmbZGConv, preds: nn.ModuleList,
                  pools: nn.ModuleList, hidden_dim, output_channels, conv_layer, pool1,
                  pool2):
         super().__init__()
-        self.conv = conv
+        self.sub_conv = sub_conv
+        self.comp_conv = comp_conv
         self.preds = preds
         self.pools = pools
         self.pool1 = pool1
@@ -374,18 +375,41 @@ class GLASS(nn.Module):
                                                   hidden_channels=2*hidden_dim, output_channels=output_channels,
                                                   num_layers=4)])
 
-    def NodeEmb(self, x, edge_index, edge_weight):
+    def SubNodeEmb(self, x, edge_index, edge_weight):
         embs = []
         for _ in range(x.shape[1]):
-            emb = self.conv(x[:, _, :].reshape(x.shape[0], x.shape[-1]),
+            emb = self.sub_conv(x[:, _, :].reshape(x.shape[0], x.shape[-1]),
                             edge_index, edge_weight)
             embs.append(emb.reshape(emb.shape[0], 1, emb.shape[-1]))
         emb = torch.cat(embs, dim=1)
         emb = torch.mean(emb, dim=1)
         return emb
 
-    def Pool(self, emb, subG_node, pool1, pool2, num_nodes, device):
+    def CompNodeEmb(self, x, edge_index, edge_weight):
+        embs = []
+        for _ in range(x.shape[1]):
+            emb = self.comp_conv(x[:, _, :].reshape(x.shape[0], x.shape[-1]),
+                            edge_index, edge_weight)
+            embs.append(emb.reshape(emb.shape[0], 1, emb.shape[-1]))
+        emb = torch.cat(embs, dim=1)
+        emb = torch.mean(emb, dim=1)
+        return emb
+
+    def SubPool(self, emb, subG_node, pool, num_nodes, device):
         batch, pos = pad2batch(subG_node)
+        emb_subg = emb[pos]
+        if self.pool1 != 'sort':
+            emb_subg = pool(emb_subg, batch)
+        else:
+            emb_subg = pool(emb_subg, batch, self.k)
+            emb_subg = emb_subg.unsqueeze(1)  # [num_graphs, 1, k * hidden]
+            emb_subg = F.relu(self.conv1(emb_subg))
+            emb_subg = self.maxpool1d(emb_subg)
+            emb_subg = F.relu(self.conv2(emb_subg))
+            emb_subg = emb_subg.view(emb_subg.size(0), -1)
+        return emb_subg
+
+    def CompPool(self, emb, subG_node, pool, num_nodes, device):
         complement = []
         for subgraph in subG_node:
             subgraph = list(filter(lambda node: node != -1, subgraph.tolist()))
@@ -393,33 +417,25 @@ class GLASS(nn.Module):
             complement.append(subg_comp.to(device))
         complement = pad_sequence(complement, batch_first=True, padding_value=-1).to(torch.int64)
         batch_comp, pos_comp = pad2batch(complement)
-        emb_subg = emb[pos]
         emb_comp = emb[pos_comp]
-        if self.pool1 != 'sort':
-            emb_subg = pool1(emb_subg, batch)
-        else:
-            emb_subg = pool1(emb_subg, batch, self.k)
-            emb_subg = emb_subg.unsqueeze(1)  # [num_graphs, 1, k * hidden]
-            emb_subg = F.relu(self.conv1(emb_subg))
-            emb_subg = self.maxpool1d(emb_subg)
-            emb_subg = F.relu(self.conv2(emb_subg))
-            emb_subg = emb_subg.view(emb_subg.size(0), -1)
         if self.pool2 != 'sort':
-            emb_comp = pool2(emb_comp, batch_comp)
+            emb_comp = pool(emb_comp, batch_comp)
         else:
-            emb_comp = pool2(emb_comp, batch_comp, self.k)
+            emb_comp = pool(emb_comp, batch_comp, self.k)
             emb_comp = emb_comp.unsqueeze(1)  # [num_graphs, 1, k * hidden]
             emb_comp = F.relu(self.conv1(emb_comp))
             emb_comp = self.maxpool1d(emb_comp)
             emb_comp = F.relu(self.conv2(emb_comp))
             emb_comp = emb_comp.view(emb_comp.size(0), -1)
-        emb = torch.cat([emb_subg, emb_comp], dim=-1)
-        return emb
+        return emb_comp
 
     def forward(self, x, edge_index, edge_weight, subG_node, device=-1, id=0):
         num_nodes = len(x)
-        emb = self.NodeEmb(x, edge_index, edge_weight)
-        emb = self.Pool(emb, subG_node, self.pools[0], self.pools[1], num_nodes, device)
+        sub_emb = self.SubNodeEmb(x, edge_index, edge_weight)
+        comp_emb = self.CompNodeEmb(x, edge_index, edge_weight)
+        emb_subg = self.SubPool(sub_emb, subG_node, self.pools[0], num_nodes, device)
+        emb_comp = self.CompPool(comp_emb, subG_node, self.pools[1], num_nodes, device)
+        emb = torch.cat([emb_subg, emb_comp], dim=-1)
         return self.preds[id](emb)
 
 
