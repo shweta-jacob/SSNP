@@ -221,11 +221,6 @@ def test(pool1="size",
         print(f"repeat {repeat}")
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio,
                          aggr)
-        # print("Creating loaders")
-        # trn_loader = loader_fn(trn_dataset, batch_size)
-        # val_loader = tloader_fn(val_dataset, batch_size)
-        # tst_loader = tloader_fn(tst_dataset, batch_size)
-        # print("Finished creating loaders")
         optimizer = Adam(gnn.parameters(), lr=lr)
         scd = lr_scheduler.ReduceLROnPlateau(optimizer,
                                              factor=resi,
