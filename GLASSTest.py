@@ -303,7 +303,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
     sub_gnn = GNN(sub_conv).to(config.device)
     comp_gnn = GNN(comp_conv).to(config.device)
 
-    mlp = MLP(input_channels=3 * hidden_dim * (conv_layer), hidden_channels=2 * hidden_dim,
+    mlp = MLP(input_channels=4 * hidden_dim * (conv_layer), hidden_channels=2 * hidden_dim,
               output_channels=output_channels, num_layers=4)
 
     pool_fn_fn = {
