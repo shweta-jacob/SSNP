@@ -388,7 +388,7 @@ def test(pool1="size",
             trn_time.append(time.time() - t1)
             scd.step(loss)
 
-            if i % 10 == 0:
+            if i % 5 == 0:
                 score, _ = train.test(gnn,
                                       val_loader,
                                       sub_val_loader, comp_val_loader,
@@ -406,7 +406,7 @@ def test(pool1="size",
                     print(
                         f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {tst_score:.4f}",
                         flush=True)
-                    early_stop /= 2
+                    early_stop = 0
                 elif score >= val_score - 1e-5:
                     score, _ = train.test(gnn,
                                           tst_loader,
@@ -417,12 +417,12 @@ def test(pool1="size",
                     print(
                         f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {score:.4f}",
                         flush=True)
-                    early_stop /= 2
+                    early_stop = 0
                 else:
                     print(
                         f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, sub_tst_loader, comp_tst_loader, score_fn, loss_fn=loss_fn, device=config.device)[0]:.4f}",
                         flush=True)
-                if early_stop > 10:
+                if early_stop > 20:
                     break
         print(
             f"end: epoch {i + 1}, train time {sum(trn_time):.2f} s, val {val_score:.3f}, tst {tst_score:.3f}",
