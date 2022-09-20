@@ -14,7 +14,7 @@ def train(optimizer, model, dataloader, sub_loader, comp_loader, loss_fn, device
         optimizer.zero_grad()
         first = next(iterator1)
         second = next(iterator2)
-        pred = model(*batch[:-1], *first[:-1], *second[:-1], id=0)
+        pred = model(*batch[:-1], *first[:-1], *second[:-1], device, id=0)
         loss = loss_fn(pred, batch[-1])
         loss.backward()
         total_loss.append(loss.detach().item())
@@ -36,7 +36,7 @@ def test(model, dataloader, sub_loader, comp_loader, metrics, loss_fn, device):
     for batch in dataloader:
         first = next(iterator1)
         second = next(iterator2)
-        pred = model(*batch[:-1], *first[:-1], *second[:-1])
+        pred = model(*batch[:-1], *first[:-1], *second[:-1], device)
         preds.append(pred)
         ys.append(batch[-1])
     pred = torch.cat(preds, dim=0)
