@@ -430,7 +430,7 @@ def test(pool1="size",
         end_time = time.time()
         outs.append(tst_score)
         time_taken = end_time - start_time
-        print(f'Time taken: {time_taken}')
+        print(f'Time taken for run {repeat + 1}: {time_taken}')
     print(
         f"average {np.average(outs):.3f} error {np.std(outs) / np.sqrt(len(outs)):.3f}"
     )
@@ -444,5 +444,8 @@ with open(f"config/{args.dataset}.yml") as f:
 params.update({'pool1': args.pool1, 'pool2': args.pool2})
 
 print("params", params, flush=True)
+exp_start_time = time.time()
 split()
 test(**(params))
+exp_end_time = time.time()
+print(f'Time taken for experiment: {exp_end_time - exp_start_time}')
