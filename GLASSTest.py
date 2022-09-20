@@ -145,12 +145,12 @@ def split_GNN_seg(trn_dataset, val_dataset, tst_dataset):
             print("empty", centre)
         return Data(x[node], edge, edge_attr[edge_mask], y=y, pos=npos)
 
-    # def tocompdatalist(gd, hop):
-    #     return [
-    #         todata(gd.x, gd.edge_index, gd.edge_attr,
-    #                gd.comp[i][gd.comp[i] >= 0], hop, gd.y[i])
-    #         for i in range(len(gd))
-    #     ]
+    def tocompdatalist(gd, hop):
+        return [
+            todata(gd.x, gd.edge_index, gd.edge_attr,
+                   gd.comp[i][gd.comp[i] >= 0], hop, gd.y[i])
+            for i in range(len(gd))
+        ]
 
     def tosubdatalist(gd, hop):
         return [
@@ -168,9 +168,9 @@ def split_GNN_seg(trn_dataset, val_dataset, tst_dataset):
     print("Creating test GNN seg dataset")
     sub_tst_dataset = GsDataset(tosubdatalist(tst_dataset, 0))
 
-    # comp_trn_dataset = GsDataset(tocompdatalist(trn_dataset, 0))
-    # comp_val_dataset = GsDataset(tocompdatalist(val_dataset, 0))
-    # comp_tst_dataset = GsDataset(tocompdatalist(tst_dataset, 0))
+    comp_trn_dataset = GsDataset(tocompdatalist(trn_dataset, 0))
+    comp_val_dataset = GsDataset(tocompdatalist(val_dataset, 0))
+    comp_tst_dataset = GsDataset(tocompdatalist(tst_dataset, 0))
 
     def tfunc(ds, bs, shuffle=False, drop_last=False):
         return GsDataloader(ds, bs, shuffle=shuffle, drop_last=drop_last)
@@ -275,7 +275,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
                                                    dropout=dropout),
                             gn=True)
 
-    sub_conv = GConv(input_channels,
+    sub_conv = GConv(hidden_dim,
                      hidden_dim,
                      hidden_dim,
                      conv_layer,
@@ -284,26 +284,24 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
                      activation=nn.ELU(inplace=True),
                      dropout=dropout)
 
-    # comp_conv = GConv(hidden_dim,
-    #                   hidden_dim,
-    #                   hidden_dim,
-    #                   conv_layer,
-    #                   max_deg=max_deg,
-    #                   conv=functools.partial(GCNConv, add_self_loops=False),
-    #                   activation=nn.ELU(inplace=True),
-    #                   dropout=dropout)
+    comp_conv = GConv(hidden_dim,
+                      hidden_dim,
+                      hidden_dim,
+                      conv_layer,
+                      max_deg=max_deg,
+                      conv=functools.partial(GCNConv, add_self_loops=False),
+                      activation=nn.ELU(inplace=True),
+                      dropout=dropout)
 
     # use pretrained node embeddings.
-    if args.use_nodeid:
+    if args.use_deg:
         print("load ", f"./Emb/{args.dataset}_{input_channels}.pt")
         emb = torch.load(f"./Emb/{args.dataset}_{input_channels}.pt",
                          map_location=torch.device('cpu')).detach()
         conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
-        sub_conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
-        # comp_conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
 
     sub_gnn = GNN(sub_conv).to(config.device)
-    # comp_gnn = GNN(comp_conv).to(config.device)
+    comp_gnn = GNN(comp_conv).to(config.device)
 
     mlp = MLP(input_channels=3 * hidden_dim * (conv_layer), hidden_channels=2 * hidden_dim,
               output_channels=output_channels, num_layers=4)
@@ -325,7 +323,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
     else:
         raise NotImplementedError
 
-    gnn = models.GLASS(conv, sub_gnn, torch.nn.ModuleList([mlp]), torch.nn.ModuleList([pool_fn1, pool_fn2]),
+    gnn = models.GLASS(conv, sub_gnn, comp_gnn, torch.nn.ModuleList([mlp]), torch.nn.ModuleList([pool_fn1, pool_fn2]),
                        hidden_dim, output_channels, conv_layer, pool1, pool2).to(config.device)
     return gnn
 
@@ -371,9 +369,9 @@ def test(pool1="size",
         sub_val_loader = seg_tloader_fn(sub_val_dataset, batch_size)
         sub_tst_loader = seg_tloader_fn(sub_tst_dataset, batch_size)
 
-        # comp_trn_loader = seg_loader_fn(comp_trn_dataset, batch_size)
-        # comp_val_loader = seg_tloader_fn(comp_val_dataset, batch_size)
-        # comp_tst_loader = seg_tloader_fn(comp_tst_dataset, batch_size)
+        comp_trn_loader = seg_loader_fn(comp_trn_dataset, batch_size)
+        comp_val_loader = seg_tloader_fn(comp_val_dataset, batch_size)
+        comp_tst_loader = seg_tloader_fn(comp_tst_dataset, batch_size)
 
         optimizer = Adam(gnn.parameters(), lr=lr)
         scd = lr_scheduler.ReduceLROnPlateau(optimizer,
@@ -385,7 +383,7 @@ def test(pool1="size",
         trn_time = []
         for i in range(500):
             t1 = time.time()
-            loss = train.train(optimizer, gnn, trn_loader, sub_trn_loader, loss_fn,
+            loss = train.train(optimizer, gnn, trn_loader, sub_trn_loader, comp_trn_loader, loss_fn,
                                device=config.device)
             trn_time.append(time.time() - t1)
             scd.step(loss)
@@ -393,7 +391,7 @@ def test(pool1="size",
             if i % 5 == 0:
                 score, _ = train.test(gnn,
                                       val_loader,
-                                      sub_val_loader,
+                                      sub_val_loader, comp_val_loader,
                                       score_fn,
                                       loss_fn=loss_fn, device=config.device)
                 early_stop += 1
@@ -401,7 +399,7 @@ def test(pool1="size",
                     val_score = score
                     score, _ = train.test(gnn,
                                           tst_loader,
-                                          sub_tst_loader,
+                                          sub_tst_loader, comp_tst_loader,
                                           score_fn,
                                           loss_fn=loss_fn, device=config.device)
                     tst_score = score
@@ -412,7 +410,7 @@ def test(pool1="size",
                 elif score >= val_score - 1e-5:
                     score, _ = train.test(gnn,
                                           tst_loader,
-                                          sub_tst_loader,
+                                          sub_tst_loader, comp_tst_loader,
                                           score_fn,
                                           loss_fn=loss_fn, device=config.device)
                     tst_score = max(score, tst_score)
@@ -422,7 +420,7 @@ def test(pool1="size",
                     early_stop /= 2
                 else:
                     print(
-                        f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, sub_tst_loader, score_fn, loss_fn=loss_fn, device=config.device)[0]:.4f}",
+                        f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, sub_tst_loader, comp_tst_loader, score_fn, loss_fn=loss_fn, device=config.device)[0]:.4f}",
                         flush=True)
                 if early_stop > 10:
                     break
