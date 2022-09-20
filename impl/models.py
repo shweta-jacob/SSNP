@@ -313,6 +313,7 @@ class SizePool(AddPool):
         x = GraphSizeNorm()(x, batch)
         return self.pool_fn(x, batch)
 
+
 class SortPool(nn.Module):
     def __init__(self, trans_fn=None):
         super().__init__()
@@ -356,7 +357,7 @@ class GLASS(nn.Module):
 
             dense_dim = (dense_dim - conv1d_kws[1] + 1) * conv1d_channels[1]
             self.preds = torch.nn.ModuleList([MLP(input_channels=2 * dense_dim,
-                                                  hidden_channels=2*hidden_dim, output_channels=output_channels,
+                                                  hidden_channels=2 * hidden_dim, output_channels=output_channels,
                                                   num_layers=4)])
         elif pool1 == 'sort' or pool2 == 'sort':
             self.k = int(30)
@@ -372,70 +373,69 @@ class GLASS(nn.Module):
 
             dense_dim = (dense_dim - conv1d_kws[1] + 1) * conv1d_channels[1]
             self.preds = torch.nn.ModuleList([MLP(input_channels=dense_dim + (hidden_dim * conv_layer),
-                                                  hidden_channels=2*hidden_dim, output_channels=output_channels,
+                                                  hidden_channels=2 * hidden_dim, output_channels=output_channels,
                                                   num_layers=4)])
 
-    def SubNodeEmb(self, x, edge_index, edge_weight):
+    def NodeEmb1(self, x, edge_index, edge_weight):
         embs = []
         for _ in range(x.shape[1]):
             emb = self.sub_conv(x[:, _, :].reshape(x.shape[0], x.shape[-1]),
-                            edge_index, edge_weight)
+                                edge_index, edge_weight)
             embs.append(emb.reshape(emb.shape[0], 1, emb.shape[-1]))
         emb = torch.cat(embs, dim=1)
         emb = torch.mean(emb, dim=1)
         return emb
 
-    def CompNodeEmb(self, x, edge_index, edge_weight):
+    def NodeEmb2(self, x, edge_index, edge_weight):
         embs = []
         for _ in range(x.shape[1]):
             emb = self.comp_conv(x[:, _, :].reshape(x.shape[0], x.shape[-1]),
-                            edge_index, edge_weight)
+                                 edge_index, edge_weight)
             embs.append(emb.reshape(emb.shape[0], 1, emb.shape[-1]))
         emb = torch.cat(embs, dim=1)
         emb = torch.mean(emb, dim=1)
         return emb
 
-    def SubPool(self, emb, subG_node, pool, num_nodes, device):
+    def Pool(self, emb, subG_node, complement, pool1, pool2):
         batch, pos = pad2batch(subG_node)
+        batch_comp, pos_comp = pad2batch(complement)
         emb_subg = emb[pos]
+        emb_comp = emb[pos_comp]
         if self.pool1 != 'sort':
-            emb_subg = pool(emb_subg, batch)
+            emb_subg = pool1(emb_subg, batch)
         else:
-            emb_subg = pool(emb_subg, batch, self.k)
+            emb_subg = pool1(emb_subg, batch, self.k)
             emb_subg = emb_subg.unsqueeze(1)  # [num_graphs, 1, k * hidden]
             emb_subg = F.relu(self.conv1(emb_subg))
             emb_subg = self.maxpool1d(emb_subg)
             emb_subg = F.relu(self.conv2(emb_subg))
             emb_subg = emb_subg.view(emb_subg.size(0), -1)
-        return emb_subg
+        if self.pool2 != 'sort':
+            emb_comp = pool2(emb_comp, batch_comp)
+        else:
+            emb_comp = pool2(emb_comp, batch_comp, self.k)
+            emb_comp = emb_comp.unsqueeze(1)  # [num_graphs, 1, k * hidden]
+            emb_comp = F.relu(self.conv1(emb_comp))
+            emb_comp = self.maxpool1d(emb_comp)
+            emb_comp = F.relu(self.conv2(emb_comp))
+            emb_comp = emb_comp.view(emb_comp.size(0), -1)
+        emb = torch.cat([emb_subg, emb_comp], dim=-1)
+        return emb
 
-    def CompPool(self, emb, subG_node, pool, num_nodes, device):
+
+    def forward(self, x, edge_index, edge_weight, subG_node, device=-1, id=0):
+        num_nodes = len(x)
         complement = []
         for subgraph in subG_node:
             subgraph = list(filter(lambda node: node != -1, subgraph.tolist()))
             subg_comp = torch.Tensor(list(set(range(num_nodes)).difference(subgraph)))
             complement.append(subg_comp.to(device))
         complement = pad_sequence(complement, batch_first=True, padding_value=-1).to(torch.int64)
-        batch_comp, pos_comp = pad2batch(complement)
-        emb_comp = emb[pos_comp]
-        if self.pool2 != 'sort':
-            emb_comp = pool(emb_comp, batch_comp)
-        else:
-            emb_comp = pool(emb_comp, batch_comp, self.k)
-            emb_comp = emb_comp.unsqueeze(1)  # [num_graphs, 1, k * hidden]
-            emb_comp = F.relu(self.conv1(emb_comp))
-            emb_comp = self.maxpool1d(emb_comp)
-            emb_comp = F.relu(self.conv2(emb_comp))
-            emb_comp = emb_comp.view(emb_comp.size(0), -1)
-        return emb_comp
-
-    def forward(self, x, edge_index, edge_weight, subG_node, device=-1, id=0):
-        num_nodes = len(x)
-        sub_emb = self.SubNodeEmb(x, edge_index, edge_weight)
-        comp_emb = self.CompNodeEmb(x, edge_index, edge_weight)
-        emb_subg = self.SubPool(sub_emb, subG_node, self.pools[0], num_nodes, device)
-        emb_comp = self.CompPool(comp_emb, subG_node, self.pools[1], num_nodes, device)
-        emb = torch.cat([emb_subg, emb_comp], dim=-1)
+        sub_emb = self.NodeEmb1(x, edge_index, edge_weight)
+        comp_emb = self.NodeEmb2(x, edge_index, edge_weight)
+        emb_subg = self.Pool(sub_emb, subG_node, complement, self.pools[0], self.pools[1])
+        emb_comp = self.Pool(comp_emb, subG_node, complement, self.pools[0], self.pools[1])
+        emb = (emb_subg + emb_comp)/2
         return self.preds[id](emb)
 
 
