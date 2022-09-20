@@ -257,7 +257,12 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         aggr: aggregation method. mean, sum, or gcn. 
     '''
     print("Creating model")
-    conv = models.EmbZGConv(hidden_dim,
+    input_channels = hidden_dim
+    if args.use_nodeid:
+        input_channels = 64
+
+    conv = models.EmbZGConv(input_channels,
+                            hidden_dim,
                             hidden_dim,
                             conv_layer,
                             max_deg=max_deg,
@@ -270,7 +275,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
                                                    dropout=dropout),
                             gn=True)
 
-    sub_conv = GConv(hidden_dim,
+    sub_conv = GConv(input_channels,
                      hidden_dim,
                      hidden_dim,
                      conv_layer,
@@ -290,8 +295,8 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
 
     # use pretrained node embeddings.
     if args.use_nodeid:
-        print("load ", f"./Emb/{args.dataset}_{hidden_dim}.pt")
-        emb = torch.load(f"./Emb/{args.dataset}_{hidden_dim}.pt",
+        print("load ", f"./Emb/{args.dataset}_{input_channels}.pt")
+        emb = torch.load(f"./Emb/{args.dataset}_{input_channels}.pt",
                          map_location=torch.device('cpu')).detach()
         conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
         sub_conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)

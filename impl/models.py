@@ -180,6 +180,7 @@ class EmbZGConv(nn.Module):
     '''
 
     def __init__(self,
+                 input_channels,
                  hidden_channels,
                  output_channels,
                  num_layers,
@@ -192,12 +193,17 @@ class EmbZGConv(nn.Module):
                  **kwargs):
         super().__init__()
         self.input_emb = nn.Embedding(max_deg + 1,
-                                      hidden_channels,
+                                      input_channels,
                                       scale_grad_by_freq=False)
-        self.emb_gn = GraphNorm(hidden_channels)
+        self.emb_gn = GraphNorm(input_channels)
         self.convs = nn.ModuleList()
         self.jk = jk
-        for _ in range(num_layers - 1):
+        self.convs.append(
+            conv(in_channels=input_channels,
+                 out_channels=hidden_channels,
+                 activation=activation,
+                 **kwargs))
+        for _ in range(num_layers - 2):
             self.convs.append(
                 conv(in_channels=hidden_channels,
                      out_channels=hidden_channels,
