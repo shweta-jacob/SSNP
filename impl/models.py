@@ -428,7 +428,7 @@ class GLASS(nn.Module):
         plain_emb = self.Pool(plain_emb, subG_node, self.pools[0], self.pools[1], subG_comp)
         sub_emb = self.SubEmb(sub_x, sub_edge_index, sub_edge_weight, sub_node)
         comp_emb = self.CompEmb(comp_x, comp_edge_index, comp_edge_weight, comp_node)
-        final_emb = torch.cat([plain_emb, sub_emb, comp_emb], dim=-1)
+        final_emb = torch.cat([sub_emb, plain_emb, comp_emb], dim=-1)
         return self.preds[id](final_emb)
 
 

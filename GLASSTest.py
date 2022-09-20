@@ -388,7 +388,7 @@ def test(pool1="size",
             trn_time.append(time.time() - t1)
             scd.step(loss)
 
-            if i % 5 == 0:
+            if i % 10 == 0:
                 score, _ = train.test(gnn,
                                       val_loader,
                                       sub_val_loader, comp_val_loader,
