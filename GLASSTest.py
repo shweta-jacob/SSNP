@@ -258,7 +258,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
     '''
     print("Creating model")
     input_channels = hidden_dim
-    if args.use_nodeid:
+    if args.use_deg:
         input_channels = 64
 
     conv = models.EmbZGConv(input_channels,
