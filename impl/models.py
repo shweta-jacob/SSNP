@@ -191,7 +191,7 @@ class EmbZGConv(nn.Module):
                  **kwargs):
         super().__init__()
         self.input_emb = nn.Embedding(max_deg + 1,
-                                      hidden_channels,
+                                      input_channels,
                                       scale_grad_by_freq=False)
         self.emb_gn = GraphNorm(input_channels)
         self.convs = nn.ModuleList()
@@ -201,17 +201,12 @@ class EmbZGConv(nn.Module):
                  out_channels=hidden_channels,
                  activation=activation,
                  **kwargs))
-        for _ in range(num_layers - 2):
+        for _ in range(num_layers - 1):
             self.convs.append(
                 conv(in_channels=hidden_channels,
                      out_channels=hidden_channels,
                      activation=activation,
                      **kwargs))
-        self.convs.append(
-            conv(in_channels=hidden_channels,
-                 out_channels=output_channels,
-                 activation=activation,
-                 **kwargs))
         self.activation = activation
         self.dropout = dropout
         if gn:
