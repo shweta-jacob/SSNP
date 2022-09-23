@@ -217,7 +217,7 @@ def test(pool1="size",
         tst_score = 0
         trn_time = []
         print("Start Training")
-        for i in range(100):
+        for i in range(200):
             t1 = time.time()
             loss = train.train(optimizer, gnn, trn_dataset, loss_fn, device=config.device)
             trn_time.append(time.time() - t1)
@@ -261,10 +261,10 @@ def test(pool1="size",
         time_taken = end_time - start_time
         print(f'Time taken for run {repeat + 1}: {time_taken}')
     print(
-        f"average {np.average(vals):.3f} ± {np.std(vals) / np.sqrt(len(vals)):.3f}"
+        f"average val {np.average(vals):.3f} ± {np.std(vals) / np.sqrt(len(vals)):.3f}"
     )
     print(
-        f"average {np.average(outs):.3f} ± {np.std(outs) / np.sqrt(len(outs)):.3f}"
+        f"average test {np.average(outs):.3f} ± {np.std(outs) / np.sqrt(len(outs)):.3f}"
     )
 
 

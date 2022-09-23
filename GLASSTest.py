@@ -215,6 +215,7 @@ def test(pool1="size",
         num_div /= 5
 
     outs = []
+    vals = []
     for repeat in range(args.repeat):
         start_time = time.time()
         set_seed((1 << repeat) - 1)
@@ -227,10 +228,9 @@ def test(pool1="size",
                                              min_lr=5e-5)
         val_score = 0
         tst_score = 0
-        early_stop = 0
         trn_time = []
         print("Start Training")
-        for i in range(300):
+        for i in range(500):
             print(f'Epoch {i + 1}')
             t1 = time.time()
             loss = train.train(optimizer, gnn, trn_dataset, loss_fn, device=config.device)
@@ -244,7 +244,6 @@ def test(pool1="size",
                                       loss_fn=loss_fn, device=config.device)
 
                 if score > val_score:
-                    early_stop = 0
                     val_score = score
                     score, _ = train.test(gnn,
                                           tst_dataset,
@@ -264,24 +263,23 @@ def test(pool1="size",
                         f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {score:.4f}",
                         flush=True)
                 else:
-                    early_stop += 1
                     if i % 10 == 0:
                         print(
                             f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_dataset, score_fn, loss_fn=loss_fn, device=config.device)[0]:.4f}",
                             flush=True)
-            if val_score >= 1 - 1e-5:
-                early_stop += 1
-            if early_stop > 100 / num_div:
-                break
         print(
             f"end: epoch {i + 1}, train time {sum(trn_time):.2f} s, val {val_score:.3f}, tst {tst_score:.3f}",
             flush=True)
         end_time = time.time()
+        vals.append(val_score)
         outs.append(tst_score)
         time_taken = end_time - start_time
         print(f'Time taken for run {repeat + 1}: {time_taken}')
     print(
-        f"average {np.average(outs):.3f} ± {np.std(outs) / np.sqrt(len(outs)):.3f}"
+            f"average val {np.average(vals):.3f} ± {np.std(vals) / np.sqrt(len(vals)):.3f}"
+        )
+    print(
+        f"average test {np.average(outs):.3f} ± {np.std(outs) / np.sqrt(len(outs)):.3f}"
     )
 
 
