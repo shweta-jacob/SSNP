@@ -237,36 +237,35 @@ def test(pool1="size",
             trn_time.append(time.time() - t1)
             scd.step(loss)
 
-            if i >= 100 / num_div:
+            score, _ = train.test(gnn,
+                                  val_dataset,
+                                  score_fn,
+                                  loss_fn=loss_fn, device=config.device)
+
+            if score > val_score:
+                val_score = score
                 score, _ = train.test(gnn,
-                                      val_dataset,
+                                      tst_dataset,
                                       score_fn,
                                       loss_fn=loss_fn, device=config.device)
-
-                if score > val_score:
-                    val_score = score
-                    score, _ = train.test(gnn,
-                                          tst_dataset,
-                                          score_fn,
-                                          loss_fn=loss_fn, device=config.device)
-                    tst_score = score
+                tst_score = score
+                print(
+                    f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {tst_score:.4f}",
+                    flush=True)
+            elif score >= val_score - 1e-5:
+                score, _ = train.test(gnn,
+                                      tst_dataset,
+                                      score_fn,
+                                      loss_fn=loss_fn, device=config.device)
+                tst_score = max(score, tst_score)
+                print(
+                    f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {score:.4f}",
+                    flush=True)
+            else:
+                if i % 10 == 0:
                     print(
-                        f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {tst_score:.4f}",
+                        f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_dataset, score_fn, loss_fn=loss_fn, device=config.device)[0]:.4f}",
                         flush=True)
-                elif score >= val_score - 1e-5:
-                    score, _ = train.test(gnn,
-                                          tst_dataset,
-                                          score_fn,
-                                          loss_fn=loss_fn, device=config.device)
-                    tst_score = max(score, tst_score)
-                    print(
-                        f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {score:.4f}",
-                        flush=True)
-                else:
-                    if i % 10 == 0:
-                        print(
-                            f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_dataset, score_fn, loss_fn=loss_fn, device=config.device)[0]:.4f}",
-                            flush=True)
         print(
             f"end: epoch {i + 1}, train time {sum(trn_time):.2f} s, val {val_score:.3f}, tst {tst_score:.3f}",
             flush=True)
