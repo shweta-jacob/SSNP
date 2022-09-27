@@ -391,7 +391,11 @@ class GLASS(nn.Module):
         emb_subg = emb[pos]
         emb_comp = emb[pos_comp]
         if self.pool1 != 'sort':
-            emb_subg = pool1(emb_subg, batch)
+            emb_subg_mean = global_mean_pool(emb_subg, batch)
+            emb_subg_sum = global_add_pool(emb_subg, batch)
+            emb_subg_max = global_max_pool(emb_subg, batch)
+            emb_subg = GraphSizeNorm()(emb_subg, batch)
+            emb_subg_size = global_add_pool(emb_subg, batch)
         else:
             emb_subg = pool1(emb_subg, batch, self.k)
             emb_subg = emb_subg.unsqueeze(1)  # [num_graphs, 1, k * hidden]
@@ -400,15 +404,20 @@ class GLASS(nn.Module):
             emb_subg = F.relu(self.conv2(emb_subg))
             emb_subg = emb_subg.view(emb_subg.size(0), -1)
         if self.pool2 != 'sort':
-            emb_comp = pool2(emb_comp, batch_comp)
-        else:
-            emb_comp = pool2(emb_comp, batch_comp, self.k)
-            emb_comp = emb_comp.unsqueeze(1)  # [num_graphs, 1, k * hidden]
-            emb_comp = F.relu(self.conv1(emb_comp))
-            emb_comp = self.maxpool1d(emb_comp)
-            emb_comp = F.relu(self.conv2(emb_comp))
-            emb_comp = emb_comp.view(emb_comp.size(0), -1)
-        emb = torch.cat([emb_subg, emb_comp], dim=-1)
+            emb_comp_mean = global_mean_pool(emb_comp, batch_comp)
+            emb_comp_sum = global_add_pool(emb_comp, batch_comp)
+            emb_comp_max = global_max_pool(emb_comp, batch_comp)
+            emb_comp = GraphSizeNorm()(emb_comp, batch_comp)
+            emb_comp_size = global_max_pool(emb_comp, batch_comp)
+            emb_comp = (emb_comp_mean+emb_comp_sum+emb_comp_max+emb_comp_size)/4
+        # else:
+        #     emb_comp = pool2(emb_comp, batch_comp, self.k)
+        #     emb_comp = emb_comp.unsqueeze(1)  # [num_graphs, 1, k * hidden]
+        #     emb_comp = F.relu(self.conv1(emb_comp))
+        #     emb_comp = self.maxpool1d(emb_comp)
+        #     emb_comp = F.relu(self.conv2(emb_comp))
+        #     emb_comp = emb_comp.view(emb_comp.size(0), -1)
+        emb = torch.cat([emb_subg_mean, emb_subg_sum, emb_subg_max, emb_subg_size, emb_comp], dim=-1)
         return emb
 
     def forward(self, x, edge_index, edge_weight, subG_node, device=-1, id=0):

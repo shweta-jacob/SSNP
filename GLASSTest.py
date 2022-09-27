@@ -160,7 +160,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         print("Finished loading pretrained embeddings")
         conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
 
-    mlp = MLP(input_channels=2 * hidden_dim * (conv_layer), hidden_channels=2 * hidden_dim,
+    mlp = MLP(input_channels= (hidden_dim * (conv_layer) * 5), hidden_channels=2 * hidden_dim,
               output_channels=output_channels,
               num_layers=4)
 
@@ -222,6 +222,11 @@ def test(pool1="size",
         print(f"repeat {repeat}")
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio,
                          aggr)
+        print("Creating loaders")
+        trn_loader = loader_fn(trn_dataset, batch_size)
+        val_loader = tloader_fn(val_dataset, batch_size)
+        tst_loader = tloader_fn(tst_dataset, batch_size)
+        print("Finished creating loaders")
         optimizer = Adam(gnn.parameters(), lr=lr)
         scd = lr_scheduler.ReduceLROnPlateau(optimizer,
                                              factor=resi,
@@ -231,21 +236,20 @@ def test(pool1="size",
         trn_time = []
         print("Start Training")
         for i in range(500):
-            print(f'Epoch {i + 1}')
             t1 = time.time()
-            loss = train.train(optimizer, gnn, trn_dataset, loss_fn, device=config.device)
+            loss = train.train(optimizer, gnn, trn_loader, loss_fn, device=config.device)
             trn_time.append(time.time() - t1)
             scd.step(loss)
 
             score, _ = train.test(gnn,
-                                  val_dataset,
+                                  val_loader,
                                   score_fn,
                                   loss_fn=loss_fn, device=config.device)
 
             if score > val_score:
                 val_score = score
                 score, _ = train.test(gnn,
-                                      tst_dataset,
+                                      tst_loader,
                                       score_fn,
                                       loss_fn=loss_fn, device=config.device)
                 tst_score = score
@@ -254,7 +258,7 @@ def test(pool1="size",
                     flush=True)
             elif score >= val_score - 1e-5:
                 score, _ = train.test(gnn,
-                                      tst_dataset,
+                                      tst_loader,
                                       score_fn,
                                       loss_fn=loss_fn, device=config.device)
                 tst_score = max(score, tst_score)
@@ -264,7 +268,7 @@ def test(pool1="size",
             else:
                 if i % 10 == 0:
                     print(
-                        f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_dataset, score_fn, loss_fn=loss_fn, device=config.device)[0]:.4f}",
+                        f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn, device=config.device)[0]:.4f}",
                         flush=True)
         print(
             f"end: epoch {i + 1}, train time {sum(trn_time):.2f} s, val {val_score:.3f}, tst {tst_score:.3f}",
