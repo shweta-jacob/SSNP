@@ -131,7 +131,12 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
         z_ratio: see GLASSConv in impl/model.py. Z_ratio in [0.5, 1].
         aggr: aggregation method. mean, sum, or gcn. 
     '''
-    conv = models.EmbZGConv(hidden_dim,
+
+    input_channels = hidden_dim
+    if args.use_nodeid:
+        input_channels = 64
+    conv = models.EmbZGConv(input_channels,
+                            hidden_dim,
                             hidden_dim,
                             conv_layer,
                             max_deg=max_deg,
@@ -146,12 +151,12 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
 
     # use pretrained node embeddings.
     if args.use_nodeid:
-        print("load ", f"./Emb/{args.dataset}_{hidden_dim}.pt")
-        emb = torch.load(f"./Emb/{args.dataset}_{hidden_dim}.pt",
+        print("load ", f"./Emb/{args.dataset}_64.pt")
+        emb = torch.load(f"./Emb/{args.dataset}_64.pt",
                          map_location=torch.device('cpu')).detach()
         conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
 
-    mlp = nn.Linear(hidden_dim * (conv_layer) if jk else hidden_dim,
+    mlp = nn.Linear(hidden_dim * (conv_layer) * 4 if jk else hidden_dim * 4,
                     output_channels)
 
     pool_fn_fn = {
@@ -197,6 +202,7 @@ def test(pool="size",
 
     outs = []
     for repeat in range(args.repeat):
+        start_time = time.time()
         set_seed((1 << repeat) - 1)
         print(f"repeat {repeat}")
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio,
@@ -214,7 +220,7 @@ def test(pool="size",
         trn_time = []
         for i in range(300):
             t1 = time.time()
-            loss = train.train(optimizer, gnn, trn_loader, loss_fn)
+            loss = train.train(optimizer, gnn, trn_loader, loss_fn, config.device)
             trn_time.append(time.time() - t1)
             scd.step(loss)
 
@@ -222,7 +228,7 @@ def test(pool="size",
                 score, _ = train.test(gnn,
                                       val_loader,
                                       score_fn,
-                                      loss_fn=loss_fn)
+                                      loss_fn=loss_fn, device=config.device)
 
                 if score > val_score:
                     early_stop = 0
@@ -230,7 +236,7 @@ def test(pool="size",
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
-                                          loss_fn=loss_fn)
+                                          loss_fn=loss_fn, device=config.device)
                     tst_score = score
                     print(
                         f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {tst_score:.4f}",
@@ -239,7 +245,7 @@ def test(pool="size",
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
-                                          loss_fn=loss_fn)
+                                          loss_fn=loss_fn, device=config.device)
                     tst_score = max(score, tst_score)
                     print(
                         f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {score:.4f}",
@@ -248,7 +254,7 @@ def test(pool="size",
                     early_stop += 1
                     if i % 10 == 0:
                         print(
-                            f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn)[0]:.4f}",
+                            f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn, device=config.device)[0]:.4f}",
                             flush=True)
             if val_score >= 1 - 1e-5:
                 early_stop += 1
@@ -257,6 +263,9 @@ def test(pool="size",
         print(
             f"end: epoch {i+1}, train time {sum(trn_time):.2f} s, val {val_score:.3f}, tst {tst_score:.3f}",
             flush=True)
+        end_time = time.time()
+        time_taken = end_time - start_time
+        print(f'Time taken for run: {time_taken}')
         outs.append(tst_score)
     print(
         f"average {np.average(outs):.3f} error {np.std(outs) / np.sqrt(len(outs)):.3f}"
@@ -269,5 +278,8 @@ with open(f"config/{args.dataset}.yml") as f:
     params = yaml.safe_load(f)
 
 print("params", params, flush=True)
+start = time.time()
 split()
 test(**(params))
+end = time.time()
+print(f"Time taken for exp: {end - start}")

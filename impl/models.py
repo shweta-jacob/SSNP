@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.utils.rnn import pad_sequence
 from torch_geometric.nn import GCNConv
 from torch_geometric.nn.norm import GraphNorm, GraphSizeNorm
 from torch_geometric.nn.glob.glob import global_mean_pool, global_add_pool, global_max_pool
@@ -184,6 +185,7 @@ class EmbZGConv(nn.Module):
         jk: whether to use Jumping Knowledge Network.
     '''
     def __init__(self,
+                 input_channels,
                  hidden_channels,
                  output_channels,
                  num_layers,
@@ -196,22 +198,22 @@ class EmbZGConv(nn.Module):
                  **kwargs):
         super().__init__()
         self.input_emb = nn.Embedding(max_deg + 1,
-                                      hidden_channels,
+                                      input_channels,
                                       scale_grad_by_freq=False)
-        self.emb_gn = GraphNorm(hidden_channels)
+        self.emb_gn = GraphNorm(input_channels)
         self.convs = nn.ModuleList()
         self.jk = jk
+        self.convs.append(
+            conv(in_channels=input_channels,
+                 out_channels=hidden_channels,
+                 activation=activation,
+                 **kwargs))
         for _ in range(num_layers - 1):
             self.convs.append(
                 conv(in_channels=hidden_channels,
                      out_channels=hidden_channels,
                      activation=activation,
                      **kwargs))
-        self.convs.append(
-            conv(in_channels=hidden_channels,
-                 out_channels=output_channels,
-                 activation=activation,
-                 **kwargs))
         self.activation = activation
         self.dropout = dropout
         if gn:
@@ -343,15 +345,25 @@ class GLASS(nn.Module):
         emb = torch.mean(emb, dim=1)
         return emb
 
-    def Pool(self, emb, subG_node, pool):
+    def Pool(self, emb, subG_node, num_nodes, device):
         batch, pos = pad2batch(subG_node)
-        emb = emb[pos]
-        emb = pool(emb, batch)
+        emb_subg = emb[pos]
+        emb_comp_mean = []
+        graph_emb = torch.sum(emb, dim=0)
+        emb_subg_mean = global_mean_pool(emb_subg, batch)
+        emb_subg_sum = global_add_pool(emb_subg, batch)
+        emb_subg = GraphSizeNorm()(emb_subg, batch)
+        emb_subg_size = global_add_pool(emb_subg, batch)
+        for idx, subgraph in enumerate(subG_node):
+            emb_comp_mean.append(torch.div(graph_emb - emb_subg_sum[idx], num_nodes - len(subgraph)).to(device))
+        emb_comp_mean = torch.stack((emb_comp_mean))
+        emb = torch.cat([emb_subg_mean, emb_subg_sum, emb_subg_size, emb_comp_mean], dim=-1)
         return emb
 
-    def forward(self, x, edge_index, edge_weight, subG_node, z=None, id=0):
+    def forward(self, x, edge_index, edge_weight, subG_node, z=None, device=-1, id=0):
+        num_nodes = len(x)
         emb = self.NodeEmb(x, edge_index, edge_weight, z)
-        emb = self.Pool(emb, subG_node, self.pools[id])
+        emb = self.Pool(emb, subG_node, num_nodes, device)
         return self.preds[id](emb)
 
 
