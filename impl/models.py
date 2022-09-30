@@ -328,42 +328,57 @@ class GLASS(nn.Module):
         preds and pools are ModuleList containing the same number of MLPs and Pooling layers.
         preds[id] and pools[id] is used to predict the id-th target. Can be used for SSL.
     '''
-    def __init__(self, conv: EmbZGConv, preds: nn.ModuleList,
+    def __init__(self, subg_conv: EmbZGConv, comp_conv: EmbZGConv, preds: nn.ModuleList,
                  pools: nn.ModuleList):
         super().__init__()
-        self.conv = conv
+        self.subg_conv = subg_conv
+        self.comp_conv = comp_conv
         self.preds = preds
         self.pools = pools
 
-    def NodeEmb(self, x, edge_index, edge_weight, z=None):
+    def SubNodeEmb(self, x, edge_index, edge_weight, z=None):
         embs = []
         for _ in range(x.shape[1]):
-            emb = self.conv(x[:, _, :].reshape(x.shape[0], x.shape[-1]),
+            emb = self.subg_conv(x[:, _, :].reshape(x.shape[0], x.shape[-1]),
                             edge_index, edge_weight, z)
             embs.append(emb.reshape(emb.shape[0], 1, emb.shape[-1]))
         emb = torch.cat(embs, dim=1)
         emb = torch.mean(emb, dim=1)
         return emb
 
-    def Pool(self, emb, subG_node, num_nodes, device):
+    def CompNodeEmb(self, x, edge_index, edge_weight, z=None):
+        embs = []
+        for _ in range(x.shape[1]):
+            emb = self.comp_conv(x[:, _, :].reshape(x.shape[0], x.shape[-1]),
+                                 edge_index, edge_weight, z)
+            embs.append(emb.reshape(emb.shape[0], 1, emb.shape[-1]))
+        emb = torch.cat(embs, dim=1)
+        emb = torch.mean(emb, dim=1)
+        return emb
+
+    def Pool(self, sub_emb, comp_emb, subG_node, num_nodes, device):
         batch, pos = pad2batch(subG_node)
-        emb_subg = emb[pos]
+        emb_subg = sub_emb[pos]
+        plain_gnn_emb_sub = comp_emb[pos]
+
         emb_comp_mean = []
-        graph_emb = torch.sum(emb, dim=0)
+        graph_emb = torch.sum(comp_emb, dim=0)
         emb_subg_mean = global_mean_pool(emb_subg, batch)
         emb_subg_sum = global_add_pool(emb_subg, batch)
+        plain_gnn_emb_sub_sum = global_add_pool(plain_gnn_emb_sub, batch)
         emb_subg = GraphSizeNorm()(emb_subg, batch)
         emb_subg_size = global_add_pool(emb_subg, batch)
         for idx, subgraph in enumerate(subG_node):
-            emb_comp_mean.append(torch.div(graph_emb - emb_subg_sum[idx], num_nodes - len(subgraph)).to(device))
-        emb_comp_mean = torch.stack((emb_comp_mean))
+            emb_comp_mean.append(torch.div(graph_emb - plain_gnn_emb_sub_sum[idx], num_nodes - len(subgraph)).to(device))
+        emb_comp_mean = torch.stack(emb_comp_mean)
         emb = torch.cat([emb_subg_mean, emb_subg_sum, emb_subg_size, emb_comp_mean], dim=-1)
         return emb
 
     def forward(self, x, edge_index, edge_weight, subG_node, z=None, device=-1, id=0):
         num_nodes = len(x)
-        emb = self.NodeEmb(x, edge_index, edge_weight, z)
-        emb = self.Pool(emb, subG_node, num_nodes, device)
+        subg_emb = self.SubNodeEmb(x, edge_index, edge_weight, z)
+        comp_emb = self.CompNodeEmb(x, edge_index, edge_weight)
+        emb = self.Pool(subg_emb, comp_emb, subG_node, num_nodes, device)
         return self.preds[id](emb)
 
 

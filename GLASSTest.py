@@ -135,7 +135,21 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
     input_channels = hidden_dim
     if args.use_nodeid:
         input_channels = 64
-    conv = models.EmbZGConv(input_channels,
+    subg_conv = models.EmbZGConv(input_channels,
+                            hidden_dim,
+                            hidden_dim,
+                            conv_layer,
+                            max_deg=max_deg,
+                            activation=nn.ELU(inplace=True),
+                            jk=jk,
+                            dropout=dropout,
+                            conv=functools.partial(models.GLASSConv,
+                                                   aggr=aggr,
+                                                   z_ratio=z_ratio,
+                                                   dropout=dropout),
+                            gn=True)
+
+    comp_conv = models.EmbZGConv(input_channels,
                             hidden_dim,
                             hidden_dim,
                             conv_layer,
@@ -154,7 +168,8 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
         print("load ", f"./Emb/{args.dataset}_64.pt")
         emb = torch.load(f"./Emb/{args.dataset}_64.pt",
                          map_location=torch.device('cpu')).detach()
-        conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
+        subg_conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
+        comp_conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
 
     mlp = nn.Linear(hidden_dim * (conv_layer) * 4 if jk else hidden_dim * 4,
                     output_channels)
@@ -170,7 +185,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
     else:
         raise NotImplementedError
 
-    gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]),
+    gnn = models.GLASS(subg_conv, comp_conv, torch.nn.ModuleList([mlp]),
                        torch.nn.ModuleList([pool_fn1])).to(config.device)
     return gnn
 
