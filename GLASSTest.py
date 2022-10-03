@@ -262,7 +262,7 @@ def test(pool="size",
             flush=True)
         outs.append(tst_score)
     print(
-        f"average {np.average(outs):.3f} error {np.std(outs) / np.sqrt(len(outs)):.3f}"
+        f"average test {np.average(outs):.3f} error {np.std(outs) / np.sqrt(len(outs)):.3f}"
     )
 
 
@@ -270,7 +270,9 @@ print(args)
 # read configuration
 with open(f"config/{args.dataset}.yml") as f:
     params = yaml.safe_load(f)
-
 print("params", params, flush=True)
+start = time.time()
 split()
 test(**(params))
+end = time.time()
+print(f"Time taken for exp: {end - start}")
