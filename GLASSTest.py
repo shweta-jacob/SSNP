@@ -11,6 +11,8 @@ import time
 import random
 import yaml
 
+from reset_labels import set_labels_to_connected_components
+
 parser = argparse.ArgumentParser(description='')
 # Dataset settings
 parser.add_argument('--dataset', type=str, default='ppi_bp')
@@ -47,6 +49,7 @@ if args.use_seed:
     torch.backends.cudnn.enabled = False
 
 baseG = datasets.load_dataset(args.dataset)
+baseG = set_labels_to_connected_components(baseG)
 
 trn_dataset, val_dataset, tst_dataset = None, None, None
 max_deg, output_channels = 0, 1
