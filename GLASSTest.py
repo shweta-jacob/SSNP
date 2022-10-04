@@ -73,6 +73,9 @@ else:
 loader_fn = SubGDataset.GDataloader
 tloader_fn = SubGDataset.GDataloader
 
+unique, counts = np.unique(baseG.y.cpu().numpy(), return_counts=True)
+print(f'Distribution of classes: {np.asarray((unique, counts)).T})')
+
 
 def split():
     '''
@@ -97,6 +100,15 @@ def split():
     trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
     tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
+
+    unique, counts = np.unique(trn_dataset.y.cpu().numpy(), return_counts=True)
+    print(f'Distribution of training classes: {np.asarray((unique, counts)).T})')
+
+    unique, counts = np.unique(val_dataset.y.cpu().numpy(), return_counts=True)
+    print(f'Distribution of validation classes: {np.asarray((unique, counts)).T})')
+
+    unique, counts = np.unique(tst_dataset.y.cpu().numpy(), return_counts=True)
+    print(f'Distribution of test classes: {np.asarray((unique, counts)).T})')
     # choice of dataloader
     if args.use_maxzeroone:
 
@@ -230,7 +242,7 @@ def test(pool="size",
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
-                                          loss_fn=loss_fn)
+                                          loss_fn=loss_fn, test=True)
                     tst_score = score
                     print(
                         f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {tst_score:.4f}",
@@ -239,7 +251,7 @@ def test(pool="size",
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
-                                          loss_fn=loss_fn)
+                                          loss_fn=loss_fn, test=True)
                     tst_score = max(score, tst_score)
                     print(
                         f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {score:.4f}",
@@ -248,14 +260,14 @@ def test(pool="size",
                     early_stop += 1
                     if i % 10 == 0:
                         print(
-                            f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn)[0]:.4f}",
+                            f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn, test=True)[0]:.4f}",
                             flush=True)
             if val_score >= 1 - 1e-5:
                 early_stop += 1
             if early_stop > 100 / num_div:
                 break
         print(
-            f"end: epoch {i+1}, train time {sum(trn_time):.2f} s, val {val_score:.3f}, tst {tst_score:.3f}",
+            f"end: epoch {i + 1}, train time {sum(trn_time):.2f} s, val {val_score:.3f}, tst {tst_score:.3f}",
             flush=True)
         outs.append(tst_score)
     print(

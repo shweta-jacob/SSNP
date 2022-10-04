@@ -1,3 +1,5 @@
+import collections
+import numpy as np
 import torch
 
 
@@ -18,7 +20,7 @@ def train(optimizer, model, dataloader, loss_fn):
 
 
 @torch.no_grad()
-def test(model, dataloader, metrics, loss_fn):
+def test(model, dataloader, metrics, loss_fn, test=False):
     '''
     Test models either on validation dataset or test dataset.
     '''
@@ -31,4 +33,17 @@ def test(model, dataloader, metrics, loss_fn):
         ys.append(batch[-1])
     pred = torch.cat(preds, dim=0)
     y = torch.cat(ys, dim=0)
-    return metrics(pred.cpu().numpy(), y.cpu().numpy()), loss_fn(pred, y)
+    y_labels = y.cpu().numpy()
+    if test:
+        new_preds = np.argmax(pred.cpu().numpy(), 1)
+        labels = new_preds - y_labels
+        misclassification = np.count_nonzero(labels)
+        nonzero_elements = np.nonzero(labels)
+        print(f"Number of misclassifications: {misclassification}/{len(labels)}")
+        predictions = new_preds[nonzero_elements]
+        actual_labels = y_labels[nonzero_elements]
+        l = list(zip(actual_labels, predictions))
+        l = sorted(l)
+        common = collections.Counter(l).most_common()
+        print(common)
+    return metrics(pred.cpu().numpy(), y_labels), loss_fn(pred, y)
