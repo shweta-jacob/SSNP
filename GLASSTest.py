@@ -1,3 +1,6 @@
+import networkx as nx
+from torch_geometric.utils import to_networkx
+
 from impl import models, SubGDataset, train, metrics, utils, config
 import datasets
 import torch
@@ -52,7 +55,9 @@ trn_dataset, val_dataset, tst_dataset = None, None, None
 max_deg, output_channels = 0, 1
 score_fn = None
 
-if baseG.y.unique().shape[0] == 2:
+unique_y_values = baseG.y.unique()
+unique_num = unique_y_values.shape[0]
+if unique_num == 2:
     # binary classification task
     def loss_fn(x, y):
         return BCEWithLogitsLoss()(x.flatten(), y.flatten())
@@ -67,15 +72,35 @@ else:
     # multi-class classification task
     baseG.y = baseG.y.to(torch.int64)
     loss_fn = CrossEntropyLoss()
-    output_channels = baseG.y.unique().shape[0]
+    output_channels = unique_num
     score_fn = metrics.microf1
 
 loader_fn = SubGDataset.GDataloader
 tloader_fn = SubGDataset.GDataloader
 
-unique, counts = np.unique(baseG.y.cpu().numpy(), return_counts=True)
+y_val = baseG.y.cpu().numpy()
+unique, counts = np.unique(y_val, return_counts=True)
 print(f'Distribution of classes: {np.asarray((unique, counts)).T})')
 
+density_values = {value: [] for value in unique_y_values.tolist()}
+clustering_values = {value: [] for value in unique_y_values.tolist()}
+components_values = {value: [] for value in unique_y_values.tolist()}
+G = to_networkx(baseG)
+print(f"Properties of different classes")
+pos = baseG.pos
+for idx in range(len(pos)):
+    subg = list(filter(lambda node: node != -1, pos[idx].tolist()))
+    subgraph = G.subgraph(subg)
+    density = nx.density(subgraph)
+    clustering = nx.average_clustering(subgraph)
+    components = nx.number_strongly_connected_components(subgraph)
+    density_values[y_val[idx]].append(density)
+    clustering_values[y_val[idx]].append(clustering)
+    components_values[y_val[idx]].append(components)
+
+print(f"Density of classes: {list(map(lambda x: np.mean(density_values[x]), density_values))}")
+print(f"Clustering coefficient of classes: {list(map(lambda x: np.mean(clustering_values[x]), clustering_values))}")
+print(f"Number of connected components of classes: {list(map(lambda x: np.mean(components_values[x]), components_values))}")
 
 def split():
     '''

@@ -42,8 +42,12 @@ def test(model, dataloader, metrics, loss_fn, test=False):
         print(f"Number of misclassifications: {misclassification}/{len(labels)}")
         predictions = new_preds[nonzero_elements]
         actual_labels = y_labels[nonzero_elements]
+        commonly_mistaken = collections.Counter(actual_labels).most_common()
+        commonly_mistaken_as = collections.Counter(predictions).most_common()
+        print(f"Most commonly mistaken classes: {commonly_mistaken}")
+        print(f"Most commonly mistaken as: {commonly_mistaken_as}")
         l = list(zip(actual_labels, predictions))
         l = sorted(l)
         common = collections.Counter(l).most_common()
-        print(common)
+        print(f"Most common tuples: {common}")
     return metrics(pred.cpu().numpy(), y_labels), loss_fn(pred, y)
