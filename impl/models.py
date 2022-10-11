@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.utils.rnn import pad_sequence
 from torch_geometric.nn import GCNConv
 from torch_geometric.nn.norm import GraphNorm, GraphSizeNorm
 from torch_geometric.nn.glob.glob import global_mean_pool, global_add_pool, global_max_pool
@@ -356,29 +355,28 @@ class GLASS(nn.Module):
         emb = torch.mean(emb, dim=1)
         return emb
 
-    def Pool(self, sub_emb, comp_emb, subG_node, num_nodes, device):
+    def SubPool(self, sub_emb, subG_node):
         batch, pos = pad2batch(subG_node)
         emb_subg = sub_emb[pos]
-        plain_gnn_emb_sub = comp_emb[pos]
-
-        emb_comp_mean = []
-        graph_emb = torch.sum(comp_emb, dim=0)
         emb_subg_mean = global_mean_pool(emb_subg, batch)
         emb_subg_sum = global_add_pool(emb_subg, batch)
-        plain_gnn_emb_sub_sum = global_add_pool(plain_gnn_emb_sub, batch)
         emb_subg = GraphSizeNorm()(emb_subg, batch)
         emb_subg_size = global_add_pool(emb_subg, batch)
-        for idx, subgraph in enumerate(subG_node):
-            emb_comp_mean.append(torch.div(graph_emb - plain_gnn_emb_sub_sum[idx], num_nodes - len(subgraph)).to(device))
-        emb_comp_mean = torch.stack(emb_comp_mean)
-        emb = torch.cat([emb_subg_mean, emb_subg_sum, emb_subg_size, emb_comp_mean], dim=-1)
+        emb = torch.cat([emb_subg_mean, emb_subg_sum, emb_subg_size], dim=-1)
         return emb
 
-    def forward(self, x, edge_index, edge_weight, subG_node, z=None, device=-1, id=0):
-        num_nodes = len(x)
+    def CompPool(self, comp_emb, comp_node):
+        batch, pos = pad2batch(comp_node)
+        emb = comp_emb[pos]
+        emb = global_mean_pool(emb, batch)
+        return emb
+
+    def forward(self, x, edge_index, edge_weight, subG_node, z=None, comp_node=None, device=-1, id=0):
         subg_emb = self.SubNodeEmb(x, edge_index, edge_weight, z)
         comp_emb = self.CompNodeEmb(x, edge_index, edge_weight)
-        emb = self.Pool(subg_emb, comp_emb, subG_node, num_nodes, device)
+        subg_emb = self.SubPool(subg_emb, subG_node)
+        comp_emb = self.CompPool(comp_emb, comp_node)
+        emb = torch.cat([subg_emb, comp_emb], dim=-1)
         return self.preds[id](emb)
 
 

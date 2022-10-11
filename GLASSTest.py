@@ -1,3 +1,9 @@
+import itertools
+
+from torch import Tensor
+from torch.nn.utils.rnn import pad_sequence
+import scipy.sparse as ssp
+
 from impl import models, SubGDataset, train, metrics, utils, config
 import datasets
 import torch
@@ -19,6 +25,7 @@ parser.add_argument('--dataset', type=str, default='ppi_bp')
 # nodeid means use pretrained node embeddings in ./Emb
 parser.add_argument('--use_deg', action='store_true')
 parser.add_argument('--use_one', action='store_true')
+parser.add_argument('--num_hops', type=int, default=1)
 parser.add_argument('--use_nodeid', action='store_true')
 # node label settings
 parser.add_argument('--use_maxzeroone', action='store_true')
@@ -73,6 +80,46 @@ else:
 loader_fn = SubGDataset.GDataloader
 tloader_fn = SubGDataset.GDataloader
 
+def neighbors(fringe, A, outgoing=True):
+    # Find all 1-hop neighbors of nodes in fringe from graph A,
+    # where A is a scipy csr adjacency matrix.
+    # If outgoing=True, find neighbors with outgoing edges;
+    # otherwise, find neighbors with incoming edges (you should
+    # provide a csc matrix in this case).
+    if outgoing:
+        res = set(A[list(fringe)].indices)
+    else:
+        res = set(A[:, list(fringe)].indices)
+
+    return res
+
+
+def extract_neighborhood(dataset_split):
+    edge_weight = dataset_split[2]
+    A = ssp.csr_matrix(
+        (edge_weight, (Tensor.cpu(dataset_split[1][0]), Tensor.cpu(dataset_split[1][1]))),
+        shape=(dataset_split[0].shape[0], dataset_split[0].shape[0])
+    )
+
+    comp = []
+    for idx, nodes in enumerate(dataset_split[3]):
+        # remove padding from subgraph node list
+        subgraph_nodes = list(filter(lambda node: node != -1, nodes.tolist()))
+        visited = set(subgraph_nodes)
+        fringe = set(subgraph_nodes)
+        neighborhood = []
+        for dist in range(1, args.num_hops + 1):
+            fringe = neighbors(fringe, A)
+            fringe = fringe - visited
+            neighborhood.append(list(fringe))
+            visited = visited.union(fringe)
+            if len(fringe) == 0:
+                break
+        comp.append(torch.Tensor(list(itertools.chain.from_iterable(neighborhood))))
+
+    comp = pad_sequence(comp, batch_first=True, padding_value=-1).to(torch.int64)
+    return comp.to(config.device)
+
 
 def split():
     '''
@@ -94,9 +141,17 @@ def split():
     max_deg = torch.max(baseG.x)
     baseG.to(config.device)
     # split data
-    trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
-    val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
-    tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
+    train = baseG.get_split("train")
+    valid = baseG.get_split("valid")
+    test = baseG.get_split("test")
+
+    train_comp = extract_neighborhood(train)
+    valid_comp = extract_neighborhood(valid)
+    test_comp = extract_neighborhood(test)
+
+    trn_dataset = SubGDataset.GDataset(*train, train_comp)
+    val_dataset = SubGDataset.GDataset(*valid, valid_comp)
+    tst_dataset = SubGDataset.GDataset(*test, test_comp)
     # choice of dataloader
     if args.use_maxzeroone:
 
