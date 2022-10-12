@@ -1,6 +1,10 @@
 import collections
 import numpy as np
+import sklearn
 import torch
+import seaborn as sn
+import pandas as pd
+import matplotlib.pyplot as plt
 
 
 def train(optimizer, model, dataloader, loss_fn):
@@ -50,4 +54,13 @@ def test(model, dataloader, metrics, loss_fn, test=False):
         l = sorted(l)
         common = collections.Counter(l).most_common()
         print(f"Most common tuples: {common}")
+        confusion_matrix = sklearn.metrics.confusion_matrix(y_labels, new_preds)
+        df_cm = pd.DataFrame(confusion_matrix, range(6), range(6))
+        plt.figure(figsize=(10,7))
+        sn.set(font_scale=1.4)  # for label size
+        # sn.color_palette("flare", as_cmap=True)
+        sn.heatmap(df_cm, annot=True, annot_kws={"size": 16}, cmap="flare")  # font size
+        plt.xlabel("Predicted", fontsize=20)
+        plt.ylabel("Actual", fontsize=20)
+        plt.show()
     return metrics(pred.cpu().numpy(), y_labels), loss_fn(pred, y)
