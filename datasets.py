@@ -82,6 +82,7 @@ class BaseGraph(Data):
         self.edge_attr = self.edge_attr.to(device)
         self.pos = self.pos.to(device)
         self.y = self.y.to(device)
+        self.labels = self.labels.to(device)
         self.mask = self.mask.to(device)
         return self
 
