@@ -349,9 +349,10 @@ class GLASS(nn.Module):
         emb = pool(emb, batch)
         return emb
 
-    def forward(self, x, edge_index, edge_weight, subG_node, z=None, id=0):
+    def forward(self, x, edge_index, edge_weight, subG_node, z=None, subG_labels=None, id=0):
         emb = self.NodeEmb(x, edge_index, edge_weight, z)
         emb = self.Pool(emb, subG_node, self.pools[id])
+        emb = torch.cat([emb, subG_labels], dim=-1)
         return self.preds[id](emb)
 
 

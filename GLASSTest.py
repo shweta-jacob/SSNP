@@ -1,6 +1,7 @@
 import networkx as nx
 from torch_geometric.utils import to_networkx
 
+import reset_labels
 from impl import models, SubGDataset, train, metrics, utils, config
 import datasets
 import torch
@@ -50,6 +51,7 @@ if args.use_seed:
     torch.backends.cudnn.enabled = False
 
 baseG = datasets.load_dataset(args.dataset)
+baseG.labels = reset_labels.set_labels(baseG)
 
 trn_dataset, val_dataset, tst_dataset = None, None, None
 max_deg, output_channels = 0, 1
@@ -188,7 +190,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
                          map_location=torch.device('cpu')).detach()
         conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
 
-    mlp = nn.Linear(hidden_dim * (conv_layer) if jk else hidden_dim,
+    mlp = nn.Linear(hidden_dim * (conv_layer) + 5 if jk else hidden_dim + 5,
                     output_channels)
 
     pool_fn_fn = {
