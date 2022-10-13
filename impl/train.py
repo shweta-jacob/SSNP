@@ -1,4 +1,8 @@
 import torch
+import numpy as np
+import networkx as nx
+from matplotlib import pylab as pl
+from torch_geometric.utils import to_networkx
 
 
 def train(optimizer, model, dataloader, loss_fn):
@@ -18,7 +22,7 @@ def train(optimizer, model, dataloader, loss_fn):
 
 
 @torch.no_grad()
-def test(model, dataloader, metrics, loss_fn, test=False):
+def test(model, dataloader, metrics, loss_fn, test=False, baseG=None):
     '''
     Test models either on validation dataset or test dataset.
     '''
@@ -28,7 +32,18 @@ def test(model, dataloader, metrics, loss_fn, test=False):
     for batch in dataloader:
         pred = model(*batch[:-2], batch[6])
         preds.append(pred)
+        predicted_class = np.argmax(pred.cpu().numpy(), 1)
         ys.append(batch[5])
+        if test:
+            for pos in batch[3]:
+                G = to_networkx(baseG, to_undirected=True)
+                k = G.subgraph(pos.tolist())
+                pos = nx.circular_layout(G)  # setting the positions with respect to G, not k.
+                pl.figure()
+                nx.draw_networkx(k, pos=pos)
+
+                pl.show()
+
     pred = torch.cat(preds, dim=0)
     y = torch.cat(ys, dim=0)
     y_labels = y.cpu().numpy()

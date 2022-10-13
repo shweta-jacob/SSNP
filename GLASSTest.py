@@ -190,7 +190,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
                          map_location=torch.device('cpu')).detach()
         conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
 
-    mlp = nn.Linear(hidden_dim * (conv_layer) + 5 if jk else hidden_dim + 5,
+    mlp = nn.Linear(hidden_dim * (conv_layer) if jk else hidden_dim,
                     output_channels)
 
     pool_fn_fn = {
@@ -269,7 +269,7 @@ def test(pool="size",
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
-                                          loss_fn=loss_fn, test=True)
+                                          loss_fn=loss_fn, test=True, baseG=baseG)
                     tst_score = score
                     print(
                         f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {tst_score:.4f}",
@@ -278,7 +278,7 @@ def test(pool="size",
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
-                                          loss_fn=loss_fn, test=True)
+                                          loss_fn=loss_fn, test=True, baseG=baseG)
                     tst_score = max(score, tst_score)
                     print(
                         f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {score:.4f}",
@@ -287,7 +287,7 @@ def test(pool="size",
                     early_stop += 1
                     if i % 10 == 0:
                         print(
-                            f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn, test=True)[0]:.4f}",
+                            f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn, test=True, baseG=baseG)[0]:.4f}",
                             flush=True)
             if val_score >= 1 - 1e-5:
                 early_stop += 1

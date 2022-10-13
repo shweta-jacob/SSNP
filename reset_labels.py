@@ -1,5 +1,6 @@
 import networkx as nx
 import torch
+from matplotlib import pylab as pl
 from networkx import number_connected_components
 from torch_geometric.utils import to_networkx
 
@@ -9,7 +10,8 @@ def set_labels(baseG):
     components = number_connected_components(G)
     print(f"Number of connected components in dataset: {components}")
     y = []
-    for subgraph in baseG.pos:
+    for idx, subgraph in enumerate(baseG.pos):
+        # draw_subgraph(G, subgraph)
         k = G.subgraph(subgraph.tolist())
         subgraph_components = number_connected_components(k)
         subgraph_density = nx.density(k)
@@ -24,3 +26,12 @@ def set_labels(baseG):
         # print(subgraph_components)
     labels = torch.Tensor(y)
     return labels
+
+
+def draw_subgraph(G, subgraph):
+    # G = to_networkx(G, to_undirected=True)
+    k = G.subgraph(subgraph.tolist())
+    pos = nx.circular_layout(G)  # setting the positions with respect to G, not k.
+    pl.figure()
+    nx.draw_networkx(k, pos=pos)
+    pl.show()
