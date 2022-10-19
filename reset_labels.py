@@ -1,3 +1,4 @@
+import networkx as nx
 import torch
 from networkx import number_strongly_connected_components
 from torch_geometric.utils import to_networkx
@@ -10,10 +11,10 @@ def set_labels_to_connected_components(baseG):
     y = []
     for subgraph in baseG.pos:
         k = G.subgraph(subgraph.tolist())
-        subgraph_components = number_strongly_connected_components(k)
-        y.append(subgraph_components)
+        subgraph_density = round(nx.density(k), 1)
+        y.append(subgraph_density)
         # print(subgraph_components)
-    old_val = list(set(y))
+    old_val = sorted(list(set(y)))
     new_val = list(range(len(old_val)))
     new_dict = dict(zip(old_val, new_val))
     y = [new_dict[value] for value in y]
