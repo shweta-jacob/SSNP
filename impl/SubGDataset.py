@@ -13,20 +13,21 @@ class GDataset:
         y : the target of subgraphs.
     '''
 
-    def __init__(self, x, edge_index, edge_attr, pos, y, comp):
+    def __init__(self, x, edge_index, edge_attr, pos, y, comp1, comp2):
         self.x = x
         self.edge_index = edge_index
         self.edge_attr = edge_attr
         self.y = y
         self.pos = pos
         self.num_nodes = x.shape[0]
-        self.comp = comp
+        self.comp1 = comp1
+        self.comp2 = comp2
 
     def __len__(self):
         return self.pos.shape[0]
 
     def __getitem__(self, idx):
-        return self.pos[idx], self.y[idx], self.comp[idx]
+        return self.pos[idx], self.y[idx], self.comp1[idx], self.comp2[idx]
 
     def to(self, device):
         self.x = self.x.to(device)
@@ -34,7 +35,8 @@ class GDataset:
         self.edge_attr = self.edge_attr.to(device)
         self.pos = self.pos.to(device)
         self.y = self.y.to(device)
-        self.comp = self.comp.to(device)
+        self.comp1 = self.comp1.to(device)
+        self.comp2 = self.comp2.to(device)
         return self
 
 
@@ -62,8 +64,11 @@ class GDataloader(DataLoader):
     def get_pos(self):
         return self.Gdataset.pos
 
-    def get_comp(self):
-        return self.Gdataset.comp
+    def get_comp1(self):
+        return self.Gdataset.comp1
+
+    def get_comp2(self):
+        return self.Gdataset.comp2
 
     def get_y(self):
         return self.Gdataset.y
@@ -75,7 +80,7 @@ class GDataloader(DataLoader):
     def __next__(self):
         perm = next(self.iter)
         return self.get_x(), self.get_ei(), self.get_ea(), self.get_pos(
-        )[perm], self.get_comp()[perm], self.get_y()[perm],
+        )[perm], self.get_comp1()[perm], self.get_comp2()[perm], self.get_y()[perm],
 
 
 class ZGDataloader(GDataloader):
@@ -99,4 +104,4 @@ class ZGDataloader(GDataloader):
         perm = next(self.iter)
         tpos = self.get_pos()[perm]
         return self.get_x(), self.get_ei(), self.get_ea(), tpos, self.z_fn(
-            self.get_x(), tpos), self.get_y()[perm]
+            self.get_x(), tpos), self.get_comp1()[perm], self.get_comp2()[perm], self.get_y()[perm]

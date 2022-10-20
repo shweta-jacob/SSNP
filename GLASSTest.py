@@ -106,24 +106,31 @@ def extract_neighborhood(dataset_split):
         shape=(dataset_split[0].shape[0], dataset_split[0].shape[0])
     )
 
-    comp = []
+    all_comp1 = []
+    all_comp2 = []
     for idx, nodes in enumerate(dataset_split[3]):
         # remove padding from subgraph node list
         subgraph_nodes = list(filter(lambda node: node != -1, nodes.tolist()))
         visited = set(subgraph_nodes)
         fringe = set(subgraph_nodes)
-        neighborhood = []
-        for dist in range(1, args.num_hops + 1):
+        comp1 = []
+        comp2 = []
+        for dist in range(1, 3):
             fringe = neighbors(fringe, A)
             fringe = fringe - visited
-            neighborhood.append(list(fringe))
+            if dist == 1:
+                comp1.append(list(fringe))
+            else:
+                comp2.append(list(fringe))
             visited = visited.union(fringe)
             if len(fringe) == 0:
                 break
-        comp.append(torch.Tensor(list(itertools.chain.from_iterable(neighborhood))))
+        all_comp1.append(torch.Tensor(list(itertools.chain.from_iterable(comp1))))
+        all_comp2.append(torch.Tensor(list(itertools.chain.from_iterable(comp2))))
 
-    comp = pad_sequence(comp, batch_first=True, padding_value=-1).to(torch.int64)
-    return comp.to(config.device)
+    all_comp1 = pad_sequence(all_comp1, batch_first=True, padding_value=-1).to(torch.int64)
+    all_comp2 = pad_sequence(all_comp2, batch_first=True, padding_value=-1).to(torch.int64)
+    return all_comp1.to(config.device), all_comp2.to(config.device)
 
 
 def split():
@@ -150,13 +157,13 @@ def split():
     valid = baseG.get_split("valid")
     test = baseG.get_split("test")
 
-    train_comp = extract_neighborhood(train)
-    valid_comp = extract_neighborhood(valid)
-    test_comp = extract_neighborhood(test)
+    train_comp1, train_comp2 = extract_neighborhood(train)
+    valid_comp1, valid_comp2 = extract_neighborhood(valid)
+    test_comp1, test_comp2 = extract_neighborhood(test)
 
-    trn_dataset = SubGDataset.GDataset(*train, train_comp)
-    val_dataset = SubGDataset.GDataset(*valid, valid_comp)
-    tst_dataset = SubGDataset.GDataset(*test, test_comp)
+    trn_dataset = SubGDataset.GDataset(*train, train_comp1, train_comp2)
+    val_dataset = SubGDataset.GDataset(*valid, valid_comp1, valid_comp2)
+    tst_dataset = SubGDataset.GDataset(*test, test_comp1, test_comp2)
     # choice of dataloader
     if args.use_maxzeroone:
 
@@ -191,7 +198,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         z_ratio: see GLASSConv in impl/model.py. Z_ratio in [0.5, 1].
         aggr: aggregation method. mean, sum, or gcn. 
     '''
-    conv = models.EmbZGConv(hidden_dim,
+    sub_conv = models.EmbZGConv(hidden_dim,
                             hidden_dim,
                             conv_layer,
                             max_deg=max_deg,
@@ -204,14 +211,28 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
                                                    dropout=dropout),
                             gn=True)
 
+    comp_conv = models.EmbZGConv(hidden_dim,
+                                hidden_dim,
+                                conv_layer,
+                                max_deg=max_deg,
+                                activation=nn.ELU(inplace=True),
+                                jk=jk,
+                                dropout=dropout,
+                                conv=functools.partial(models.GLASSConv,
+                                                       aggr=aggr,
+                                                       z_ratio=z_ratio,
+                                                       dropout=dropout),
+                                gn=True)
+
     # use pretrained node embeddings.
     if args.use_nodeid:
         print("load ", f"./Emb/{args.dataset}_{hidden_dim}.pt")
         emb = torch.load(f"./Emb/{args.dataset}_{hidden_dim}.pt",
                          map_location=torch.device('cpu')).detach()
-        conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
+        sub_conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
+        comp_conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
 
-    mlp = MLP(input_channels=2 * hidden_dim * (conv_layer), hidden_channels=2 * hidden_dim,
+    mlp = MLP(input_channels=3 * hidden_dim * (conv_layer), hidden_channels=3 * hidden_dim,
               output_channels=output_channels, num_layers=4)
 
     pool_fn_fn = {
@@ -231,7 +252,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
     else:
         raise NotImplementedError
 
-    gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]),
+    gnn = models.GLASS(sub_conv, comp_conv, torch.nn.ModuleList([mlp]),
                        torch.nn.ModuleList([pool_fn1, pool_fn2]), hidden_dim, output_channels, conv_layer, pool1,
                        pool2).to(config.device)
     return gnn
