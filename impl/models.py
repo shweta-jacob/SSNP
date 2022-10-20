@@ -419,8 +419,8 @@ class GLASS(nn.Module):
         batch_comp1, pos_comp1 = pad2batch(complement1)
         batch_comp2, pos_comp2 = pad2batch(complement2)
         emb_subg = emb[pos]
-        emb_comp1 = emb[pos_comp1]
-        emb_comp2 = emb[pos_comp2]
+        emb_comp1 = comp_emb[pos_comp1]
+        emb_comp2 = comp_emb[pos_comp2]
         if self.pool1 != 'sort':
             emb_subg = pool1(emb_subg, batch)
         else:
