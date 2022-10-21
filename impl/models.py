@@ -362,6 +362,8 @@ class GLASS(nn.Module):
         plain_gnn_emb_sub = comp_emb[pos]
 
         emb_comp_mean = []
+        emb_comp_sum = []
+        emb_comp_size = []
         graph_emb = torch.sum(comp_emb, dim=0)
         emb_subg_mean = global_mean_pool(emb_subg, batch)
         emb_subg_sum = global_add_pool(emb_subg, batch)
@@ -369,9 +371,15 @@ class GLASS(nn.Module):
         emb_subg = GraphSizeNorm()(emb_subg, batch)
         emb_subg_size = global_add_pool(emb_subg, batch)
         for idx, subgraph in enumerate(subG_node):
-            emb_comp_mean.append(torch.div(graph_emb - plain_gnn_emb_sub_sum[idx], num_nodes - len(subgraph)).to(device))
+            sum = graph_emb - plain_gnn_emb_sub_sum[idx]
+            emb_comp_mean.append(torch.div(sum, num_nodes - len(subgraph)).to(device))
+            emb_comp_sum.append(sum)
+            # sum = GraphSizeNorm()(sum, batch)
+            # emb_comp_size.append(global_add_pool(sum, batch))
         emb_comp_mean = torch.stack(emb_comp_mean)
-        emb = torch.cat([emb_subg_mean, emb_subg_sum, emb_subg_size, emb_comp_mean], dim=-1)
+        emb_comp_sum = torch.stack(emb_comp_sum)
+        # emb_comp_size = torch.stack(emb_comp_size)
+        emb = torch.cat([emb_subg_mean, emb_subg_sum, emb_subg_size, emb_comp_mean, emb_comp_sum], dim=-1)
         return emb
 
     def forward(self, x, edge_index, edge_weight, subG_node, z=None, device=-1, id=0):

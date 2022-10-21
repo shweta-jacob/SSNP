@@ -171,7 +171,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
         subg_conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
         comp_conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
 
-    mlp = nn.Linear(hidden_dim * (conv_layer) * 4 if jk else hidden_dim * 4,
+    mlp = nn.Linear(hidden_dim * (conv_layer) * 5 if jk else hidden_dim * 5,
                     output_channels)
 
     pool_fn_fn = {
