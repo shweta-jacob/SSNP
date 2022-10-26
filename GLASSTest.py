@@ -101,9 +101,9 @@ def split():
     trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
     tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
-    train_subgraph_assignment = torch.zeros((trn_dataset.pos.shape[0], trn_dataset.x.shape[0]))
-    val_subgraph_assignment = torch.zeros((val_dataset.pos.shape[0], val_dataset.x.shape[0]))
-    test_subgraph_assignment = torch.zeros((tst_dataset.pos.shape[0], tst_dataset.x.shape[0]))
+    train_subgraph_assignment = torch.zeros((trn_dataset.pos.shape[0], trn_dataset.x.shape[0])).to(config.device)
+    val_subgraph_assignment = torch.zeros((val_dataset.pos.shape[0], val_dataset.x.shape[0])).to(config.device)
+    test_subgraph_assignment = torch.zeros((tst_dataset.pos.shape[0], tst_dataset.x.shape[0])).to(config.device)
     for idx, pos in enumerate(trn_dataset.pos):
         for node in pos:
             if node != -1:
@@ -200,6 +200,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
         emb = torch.load(f"./Emb/{args.dataset}_64.pt",
                          map_location=torch.device('cpu')).detach()
         gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
+        gnn.input_emb.to(config.device)
     return gnn
 
 
