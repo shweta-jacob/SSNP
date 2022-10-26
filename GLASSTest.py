@@ -11,6 +11,8 @@ import time
 import random
 import yaml
 
+from impl.models import SpectralNet
+
 parser = argparse.ArgumentParser(description='')
 # Dataset settings
 parser.add_argument('--dataset', type=str, default='ppi_bp')
@@ -49,6 +51,7 @@ if args.use_seed:
 baseG = datasets.load_dataset(args.dataset)
 
 trn_dataset, val_dataset, tst_dataset = None, None, None
+train_subgraph_assignment, val_subgraph_assignment, test_subgraph_assignment = None, None, None
 max_deg, output_channels = 0, 1
 score_fn = None
 
@@ -80,6 +83,7 @@ def split():
     '''
     # initialize and split dataset
     global trn_dataset, val_dataset, tst_dataset
+    global train_subgraph_assignment, val_subgraph_assignment, test_subgraph_assignment
     global max_deg, output_channels, loader_fn, tloader_fn
     # initialize node features
     if args.use_deg:
@@ -97,6 +101,21 @@ def split():
     trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
     tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
+    train_subgraph_assignment = torch.zeros((trn_dataset.pos.shape[0], trn_dataset.x.shape[0]))
+    val_subgraph_assignment = torch.zeros((val_dataset.pos.shape[0], val_dataset.x.shape[0]))
+    test_subgraph_assignment = torch.zeros((tst_dataset.pos.shape[0], tst_dataset.x.shape[0]))
+    for idx, pos in enumerate(trn_dataset.pos):
+        for node in pos:
+            if node != -1:
+                train_subgraph_assignment[idx][node] = 1
+    for idx, pos in enumerate(val_dataset.pos):
+        for node in pos:
+            if node != -1:
+                val_subgraph_assignment[idx][node] = 1
+    for idx, pos in enumerate(tst_dataset.pos):
+        for node in pos:
+            if node != -1:
+                test_subgraph_assignment[idx][node] = 1
     # choice of dataloader
     if args.use_maxzeroone:
 
@@ -131,28 +150,26 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
         z_ratio: see GLASSConv in impl/model.py. Z_ratio in [0.5, 1].
         aggr: aggregation method. mean, sum, or gcn. 
     '''
-    conv = models.EmbZGConv(hidden_dim,
-                            hidden_dim,
-                            conv_layer,
-                            max_deg=max_deg,
-                            activation=nn.ELU(inplace=True),
-                            jk=jk,
-                            dropout=dropout,
-                            conv=functools.partial(models.GLASSConv,
-                                                   aggr=aggr,
-                                                   z_ratio=z_ratio,
-                                                   dropout=dropout),
-                            gn=True)
+    input_channels = hidden_dim
+    if args.use_nodeid:
+        input_channels = 64
+    # conv = models.EmbZGConv(hidden_dim,
+    #                         hidden_dim,
+    #                         conv_layer,
+    #                         max_deg=max_deg,
+    #                         activation=nn.ELU(inplace=True),
+    #                         jk=jk,
+    #                         dropout=dropout,
+    #                         conv=functools.partial(models.GLASSConv,
+    #                                                aggr=aggr,
+    #                                                z_ratio=z_ratio,
+    #                                                dropout=dropout),
+    #                         gn=True)
 
     # use pretrained node embeddings.
-    if args.use_nodeid:
-        print("load ", f"./Emb/{args.dataset}_{hidden_dim}.pt")
-        emb = torch.load(f"./Emb/{args.dataset}_{hidden_dim}.pt",
-                         map_location=torch.device('cpu')).detach()
-        conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
 
-    mlp = nn.Linear(hidden_dim * (conv_layer) if jk else hidden_dim,
-                    output_channels)
+    # mlp = nn.Linear(hidden_dim * (conv_layer) if jk else hidden_dim,
+    #                 output_channels)
 
     pool_fn_fn = {
         "mean": models.MeanPool,
@@ -165,8 +182,24 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
     else:
         raise NotImplementedError
 
-    gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]),
-                       torch.nn.ModuleList([pool_fn1])).to(config.device)
+    # gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]),
+    #                    torch.nn.ModuleList([pool_fn1])).to(config.device)
+
+    num_clusters = 10
+    gnn = SpectralNet(input_channels,
+                      hidden_dim,
+                      output_channels,
+                      conv_layer,
+                      num_clusters,
+                      max_deg=max_deg,
+                      activation=nn.ELU(inplace=True),
+                      jk=jk).to(config.device)
+
+    if args.use_nodeid:
+        print("load ", f"./Emb/{args.dataset}_64.pt")
+        emb = torch.load(f"./Emb/{args.dataset}_64.pt",
+                         map_location=torch.device('cpu')).detach()
+        gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
     return gnn
 
 
@@ -201,9 +234,9 @@ def test(pool="size",
         print(f"repeat {repeat}")
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio,
                          aggr)
-        trn_loader = loader_fn(trn_dataset, batch_size)
-        val_loader = tloader_fn(val_dataset, batch_size)
-        tst_loader = tloader_fn(tst_dataset, batch_size)
+        # trn_loader = loader_fn(trn_dataset, batch_size)
+        # val_loader = tloader_fn(val_dataset, batch_size)
+        # tst_loader = tloader_fn(tst_dataset, batch_size)
         optimizer = Adam(gnn.parameters(), lr=lr)
         scd = lr_scheduler.ReduceLROnPlateau(optimizer,
                                              factor=resi,
@@ -214,13 +247,14 @@ def test(pool="size",
         trn_time = []
         for i in range(300):
             t1 = time.time()
-            loss = train.train(optimizer, gnn, trn_loader, loss_fn)
+            loss = train.train(optimizer, gnn, trn_dataset, train_subgraph_assignment, loss_fn)
             trn_time.append(time.time() - t1)
             scd.step(loss)
 
             if i >= 100 / num_div:
                 score, _ = train.test(gnn,
-                                      val_loader,
+                                      val_dataset,
+                                      val_subgraph_assignment,
                                       score_fn,
                                       loss_fn=loss_fn)
 
@@ -228,7 +262,8 @@ def test(pool="size",
                     early_stop = 0
                     val_score = score
                     score, _ = train.test(gnn,
-                                          tst_loader,
+                                          tst_dataset,
+                                          test_subgraph_assignment,
                                           score_fn,
                                           loss_fn=loss_fn)
                     tst_score = score
@@ -237,7 +272,8 @@ def test(pool="size",
                         flush=True)
                 elif score >= val_score - 1e-5:
                     score, _ = train.test(gnn,
-                                          tst_loader,
+                                          tst_dataset,
+                                          test_subgraph_assignment,
                                           score_fn,
                                           loss_fn=loss_fn)
                     tst_score = max(score, tst_score)
@@ -248,7 +284,7 @@ def test(pool="size",
                     early_stop += 1
                     if i % 10 == 0:
                         print(
-                            f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn)[0]:.4f}",
+                            f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_dataset, test_subgraph_assignment, score_fn, loss_fn=loss_fn)[0]:.4f}",
                             flush=True)
             if val_score >= 1 - 1e-5:
                 early_stop += 1
