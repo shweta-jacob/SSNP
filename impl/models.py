@@ -462,7 +462,7 @@ class SpectralNet(torch.nn.Module):
         for idx, subgraph in enumerate(pos):
             r = subgraph_to_cluster[:, idx]
             x = torch.cat([out, r.reshape(self.num_clusters, 1)], dim=-1)
-            pooled_features, indices = x.sort(dim=-1, descending=True)
+            pooled_features = x[x[:, -1].sort(descending=True)[1]]
             pooled_features = pooled_features.reshape(1, self.num_clusters * (self.hidden_channels * self.num_layers + 1))  # [num_graphs, 1, k * hidden]
             embs.append(pooled_features)
         emb = torch.stack(embs, dim=0)

@@ -277,7 +277,7 @@ def test(pool="size",
         tst_score = 0
         early_stop = 0
         trn_time = []
-        for i in range(1000):
+        for i in range(10000):
             t1 = time.time()
             loss = train.train(optimizer, gnn, trn_dataset, train_subgraph_assignment, loss_fn)
             trn_time.append(time.time() - t1)
@@ -320,7 +320,7 @@ def test(pool="size",
                             flush=True)
             if val_score >= 1 - 1e-5:
                 early_stop += 1
-            if early_stop > 100 / num_div:
+            if early_stop > 1000:
                 break
         print(
             f"end: epoch {i+1}, train time {sum(trn_time):.2f} s, val {val_score:.3f}, tst {tst_score:.3f}",
