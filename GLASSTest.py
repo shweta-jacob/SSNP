@@ -1,3 +1,5 @@
+from torch.nn.utils.rnn import pad_sequence
+
 from impl import models, SubGDataset, train, metrics, utils, config
 import datasets
 import torch
@@ -5,6 +7,7 @@ from torch.optim import Adam, lr_scheduler
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 import argparse
 import torch.nn as nn
+import networkx as nx
 import functools
 import numpy as np
 import time
@@ -48,7 +51,35 @@ if args.use_seed:
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.enabled = False
 
-baseG = datasets.load_dataset(args.dataset)
+# baseG = datasets.load_dataset(args.dataset)
+num_node = 10
+x = torch.empty((num_node, 1, 0))
+
+rawedge = nx.read_edgelist(f"./dataset_/artificial/edgelist.txt").edges
+edge_index = torch.tensor([[int(i[0]), int(i[1])]
+                                   for i in rawedge]).t()
+
+train_sub_G = [[1, 2, 3, 4], [6, 7, 8, 9], [0, 1, 6, 7]]
+val_sub_G = train_sub_G
+test_sub_G = train_sub_G
+train_sub_G_label = torch.Tensor([0, 0, 1])
+val_sub_G_label = train_sub_G_label
+test_sub_G_label = train_sub_G_label
+
+mask = torch.cat(
+    (torch.zeros(len(train_sub_G_label), dtype=torch.int64),
+     torch.ones(len(val_sub_G_label), dtype=torch.int64),
+     2 * torch.ones(len(test_sub_G_label))),
+    dim=0)
+
+label = torch.cat(
+                (train_sub_G_label, val_sub_G_label, test_sub_G_label))
+pos = pad_sequence(
+            [torch.tensor(i) for i in train_sub_G + val_sub_G + test_sub_G],
+            batch_first=True,
+            padding_value=-1)
+baseG = datasets.BaseGraph(x, edge_index, torch.ones(edge_index.shape[1]), pos,
+                           label.to(torch.float), mask)
 
 trn_dataset, val_dataset, tst_dataset = None, None, None
 train_subgraph_assignment, val_subgraph_assignment, test_subgraph_assignment = None, None, None
@@ -185,7 +216,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
     # gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]),
     #                    torch.nn.ModuleList([pool_fn1])).to(config.device)
 
-    num_clusters = 10
+    num_clusters = 5
     gnn = SpectralNet(input_channels,
                       hidden_dim,
                       output_channels,
@@ -246,13 +277,13 @@ def test(pool="size",
         tst_score = 0
         early_stop = 0
         trn_time = []
-        for i in range(300):
+        for i in range(1000):
             t1 = time.time()
             loss = train.train(optimizer, gnn, trn_dataset, train_subgraph_assignment, loss_fn)
             trn_time.append(time.time() - t1)
             scd.step(loss)
 
-            if i >= 100 / num_div:
+            if i >= 1:
                 score, _ = train.test(gnn,
                                       val_dataset,
                                       val_subgraph_assignment,

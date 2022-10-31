@@ -391,13 +391,13 @@ class SpectralNet(torch.nn.Module):
                 self.gns.append(GraphNorm(hidden_channels))
             if self.jk:
                 self.gns.append(
-                    GraphNorm(output_channels +
-                              (num_layers - 1) * hidden_channels))
+                    GraphNorm(num_layers * hidden_channels))
             else:
                 self.gns.append(GraphNorm(output_channels))
         else:
             self.gns = None
-        self.mlp = Linear(hidden_channels, num_clusters)
+        self.mlp = Linear(hidden_channels * num_layers, num_clusters)
+        self.num_layers = num_layers
         # self.k = num_clusters
         # conv1d_channels = [32, 32]
         # total_latent_dim = hidden_channels * num_layers
@@ -410,7 +410,7 @@ class SpectralNet(torch.nn.Module):
         # dense_dim = int((self.k - 2) / 2 + 1)
         #
         # dense_dim = (dense_dim - conv1d_kws[1] + 1) * conv1d_channels[1]
-        self.preds = torch.nn.ModuleList([MLP(input_channels=((hidden_channels + 1) * num_clusters),
+        self.preds = torch.nn.ModuleList([MLP(input_channels=((hidden_channels * num_layers + 1) * num_clusters),
                                               hidden_channels=2 * hidden_channels, output_channels=output_channels,
                                               num_layers=4)])
 
@@ -429,8 +429,25 @@ class SpectralNet(torch.nn.Module):
         # Propagate node feats
         x = self.input_emb(x).reshape(x.shape[0], -1)
         x = self.emb_gn(x)
+        # x = self.convs[-1](x, edge_index, edge_weight)
+        # x = self.activation(x)
+
+        xs = []
+
+        for layer, conv in enumerate(self.convs[:-1]):
+            x = conv(x, edge_index, edge_weight)
+            xs.append(x)
+            if not (self.gns is None):
+                x = self.gns[layer](x)
+            x = self.activation(x)
+            x = F.dropout(x, p=self.dropout, training=self.training)
         x = self.convs[-1](x, edge_index, edge_weight)
-        x = self.activation(x)
+        xs.append(x)
+
+        if self.jk:
+            x = torch.cat(xs, dim=-1)
+            if not (self.gns is None):
+                x = self.gns[-1](x)
 
         # Cluster assignments (logits)
         s = self.mlp(x)
@@ -438,7 +455,7 @@ class SpectralNet(torch.nn.Module):
         subgraph_to_cluster = F.normalize(torch.transpose(s, 0, 1), dim=1) @ l
         adj = utils.to_dense_adj(edge_index, edge_attr=edge_weight)
         out, out_adj, mc_loss, o_loss = dense_mincut_pool(x, adj, s)
-        out = out.reshape(self.num_clusters, self.hidden_channels)
+        out = out.reshape(self.num_clusters, self.hidden_channels * self.num_layers)
 
         # preds = []
         embs = []
@@ -446,10 +463,10 @@ class SpectralNet(torch.nn.Module):
             r = subgraph_to_cluster[:, idx]
             x = torch.cat([out, r.reshape(self.num_clusters, 1)], dim=-1)
             pooled_features, indices = x.sort(dim=-1, descending=True)
-            pooled_features = pooled_features.reshape(1, self.num_clusters * (self.hidden_channels + 1))  # [num_graphs, 1, k * hidden]
+            pooled_features = pooled_features.reshape(1, self.num_clusters * (self.hidden_channels * self.num_layers + 1))  # [num_graphs, 1, k * hidden]
             embs.append(pooled_features)
         emb = torch.stack(embs, dim=0)
-        emb = emb.reshape(len(pos), self.num_clusters * (self.hidden_channels + 1))
+        emb = emb.reshape(len(pos), self.num_clusters * (self.hidden_channels * self.num_layers + 1))
         # Obtain MinCutPool losses
         # pooled_features = F.relu(self.conv1(pooled_features))
         # pooled_features = self.maxpool1d(pooled_features)
