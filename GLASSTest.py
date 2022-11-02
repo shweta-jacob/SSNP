@@ -51,35 +51,93 @@ if args.use_seed:
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.enabled = False
 
-# baseG = datasets.load_dataset(args.dataset)
-num_node = 10
-x = torch.empty((num_node, 1, 0))
+baseG = datasets.load_dataset(args.dataset)
+# num_node = 10
+# x = torch.empty((num_node, 1, 0))
+#
+# rawedge = nx.read_edgelist(f"./dataset_/artificial/edgelist.txt").edges
+# edge_index = torch.tensor([[int(i[0]), int(i[1])]
+#                                    for i in rawedge]).t()
+#
+# train_sub_G = [[1, 2, 3, 4], [6, 7, 8, 9], [0, 1, 6, 7], [5, 6, 1, 2]]
+# val_sub_G = train_sub_G
+# test_sub_G = train_sub_G
+# train_sub_G_label = torch.Tensor([0, 0, 1, 1])
+# val_sub_G_label = train_sub_G_label
+# test_sub_G_label = train_sub_G_label
+#
+# mask = torch.cat(
+#     (torch.zeros(len(train_sub_G_label), dtype=torch.int64),
+#      torch.ones(len(val_sub_G_label), dtype=torch.int64),
+#      2 * torch.ones(len(test_sub_G_label))),
+#     dim=0)
+#
+# label = torch.cat(
+#                 (train_sub_G_label, val_sub_G_label, test_sub_G_label))
+# pos = pad_sequence(
+#             [torch.tensor(i) for i in train_sub_G + val_sub_G + test_sub_G],
+#             batch_first=True,
+#             padding_value=-1)
+# baseG = datasets.BaseGraph(x, edge_index, torch.ones(edge_index.shape[1]), pos,
+#                            label.to(torch.float), mask)
 
-rawedge = nx.read_edgelist(f"./dataset_/artificial/edgelist.txt").edges
-edge_index = torch.tensor([[int(i[0]), int(i[1])]
-                                   for i in rawedge]).t()
-
-train_sub_G = [[1, 2, 3, 4], [6, 7, 8, 9], [0, 1, 6, 7], [5, 6, 1, 2]]
-val_sub_G = train_sub_G
-test_sub_G = train_sub_G
-train_sub_G_label = torch.Tensor([0, 0, 1, 1])
-val_sub_G_label = train_sub_G_label
-test_sub_G_label = train_sub_G_label
-
-mask = torch.cat(
-    (torch.zeros(len(train_sub_G_label), dtype=torch.int64),
-     torch.ones(len(val_sub_G_label), dtype=torch.int64),
-     2 * torch.ones(len(test_sub_G_label))),
-    dim=0)
-
-label = torch.cat(
-                (train_sub_G_label, val_sub_G_label, test_sub_G_label))
-pos = pad_sequence(
-            [torch.tensor(i) for i in train_sub_G + val_sub_G + test_sub_G],
-            batch_first=True,
-            padding_value=-1)
-baseG = datasets.BaseGraph(x, edge_index, torch.ones(edge_index.shape[1]), pos,
-                           label.to(torch.float), mask)
+final_pos = []
+finalY = []
+final_mask = []
+j = 0
+i = 0
+for idx, pos in enumerate(baseG.pos[0:1121]):
+    if baseG.y[idx] == 0:
+        final_pos.append(pos)
+        finalY.append(baseG.y[idx])
+        final_mask.append(baseG.mask[idx])
+        i += 1
+    if baseG.y[idx] == 1:
+        final_pos.append(pos)
+        finalY.append(baseG.y[idx])
+        final_mask.append(baseG.mask[idx])
+        j += 1
+    if i >= 2 and j >= 2:
+        break
+j = 0
+i = 0
+val_pos = baseG.pos[1272:1431]
+val_mask = baseG.mask[1272:1431]
+val_y = baseG.y[1272:1431]
+for idx, pos in enumerate(val_pos):
+    if val_y[idx] == 0:
+        final_pos.append(pos)
+        finalY.append(val_y[idx])
+        final_mask.append(val_mask[idx])
+        i += 1
+    if val_y[idx] == 1:
+        final_pos.append(pos)
+        finalY.append(val_y[idx])
+        final_mask.append(val_mask[idx])
+        j += 1
+    if i >= 2 and j >= 2:
+        break
+j = 0
+i = 0
+test_pos = baseG.pos[1432:]
+test_mask = baseG.mask[1432:]
+test_y = baseG.y[1432:]
+for idx, pos in enumerate(test_pos):
+    if test_y[idx] == 0:
+        final_pos.append(pos)
+        finalY.append(test_y[idx])
+        final_mask.append(test_mask[idx])
+        i += 1
+    if test_y[idx] == 1:
+        final_pos.append(pos)
+        finalY.append(test_y[idx])
+        final_mask.append(test_mask[idx])
+        j += 1
+    if i >= 2 and j >= 2:
+        break
+baseG.pos = torch.stack(final_pos)
+baseG.y = torch.Tensor(finalY)
+baseG.mask = torch.Tensor(final_mask)
 
 trn_dataset, val_dataset, tst_dataset = None, None, None
 train_subgraph_assignment, val_subgraph_assignment, test_subgraph_assignment = None, None, None
@@ -216,7 +274,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
     # gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]),
     #                    torch.nn.ModuleList([pool_fn1])).to(config.device)
 
-    num_clusters = 5
+    num_clusters = 50
     gnn = SpectralNet(input_channels,
                       hidden_dim,
                       output_channels,
