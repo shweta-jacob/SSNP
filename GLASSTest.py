@@ -55,7 +55,7 @@ if args.use_seed:
 num_node = 10
 x = torch.empty((num_node, 1, 0))
 
-rawedge = nx.read_edgelist(f"./dataset_/artificial/edgelist.txt").edges
+rawedge = nx.read_edgelist(f"./artificial/graph1/edgelist.txt").edges
 edge_index = torch.tensor([[int(i[0]), int(i[1])]
                                    for i in rawedge]).t()
 
