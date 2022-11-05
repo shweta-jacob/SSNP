@@ -1,12 +1,13 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn import Sequential, Linear, Conv1d, MaxPool1d
-from torch_geometric.nn import GCNConv, GraphConv, dense_mincut_pool, global_sort_pool
-from torch_geometric.nn.norm import GraphNorm, GraphSizeNorm
-from torch_geometric.nn.glob.glob import global_mean_pool, global_add_pool, global_max_pool
-from .utils import pad2batch
+from torch.nn import Linear
 from torch_geometric import utils
+from torch_geometric.nn import GCNConv, dense_mincut_pool
+from torch_geometric.nn.glob.glob import global_mean_pool, global_add_pool, global_max_pool
+from torch_geometric.nn.norm import GraphNorm, GraphSizeNorm
+
+from .utils import pad2batch
 
 
 class Seq(nn.Module):
@@ -158,11 +159,11 @@ class GLASSConv(torch.nn.Module):
         x = self.activation(self.trans_fns[0](x_))
         # pass messages.
         x = self.adj @ x
-        x = self.gn(x)
+        # x = self.gn(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
-        x = torch.cat((x, x_), dim=-1)
+        # x = torch.cat((x, x_), dim=-1)
 
-        x = self.comb_fns[0](x)
+        # x = self.comb_fns[0](x)
         return x
 
 
@@ -451,8 +452,13 @@ class SpectralNet(torch.nn.Module):
 
         # Cluster assignments (logits)
         s = self.mlp(x)
+        updated_s = torch.zeros(x.shape[0], self.num_clusters)
+        # updated_s = torch.softmax(s, dim=-1)
+        for idx, row in enumerate(s):
+            max_idx = list(row).index(max(row))
+            updated_s[idx] = torch.Tensor([1 if val == row[max_idx] else 0 for val in row])
         l = torch.transpose(subgraph_assignment, 0, 1)
-        subgraph_to_cluster = F.normalize(torch.transpose(s, 0, 1), dim=1) @ l
+        subgraph_to_cluster = F.normalize(torch.transpose(torch.softmax(s, dim=-1), 0, 1), p=1, dim=1) @ l
         adj = utils.to_dense_adj(edge_index, edge_attr=edge_weight)
         out, out_adj, mc_loss, o_loss = dense_mincut_pool(x, adj, s)
         out = out.reshape(self.num_clusters, self.hidden_channels * self.num_layers)
@@ -462,7 +468,9 @@ class SpectralNet(torch.nn.Module):
         for idx, subgraph in enumerate(pos):
             r = subgraph_to_cluster[:, idx]
             x = torch.cat([out, r.reshape(self.num_clusters, 1)], dim=-1)
+            # x = out * r.reshape(self.num_clusters, 1)
             pooled_features = x[x[:, -1].sort(descending=True)[1]]
+            # pooled_features = x
             pooled_features = pooled_features.reshape(1, self.num_clusters * (self.hidden_channels * self.num_layers + 1))  # [num_graphs, 1, k * hidden]
             embs.append(pooled_features)
         emb = torch.stack(embs, dim=0)
