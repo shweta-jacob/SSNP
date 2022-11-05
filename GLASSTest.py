@@ -1,19 +1,19 @@
-from torch.nn.utils.rnn import pad_sequence
-
-from impl import models, SubGDataset, train, metrics, utils, config
-import datasets
-import torch
-from torch.optim import Adam, lr_scheduler
-from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 import argparse
-import torch.nn as nn
-import networkx as nx
-import functools
-import numpy as np
-import time
 import random
-import yaml
+import time
 
+import networkx as nx
+import numpy as np
+import torch
+import torch.nn as nn
+import yaml
+from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
+from torch.nn.utils.rnn import pad_sequence
+from torch.optim import Adam, lr_scheduler
+
+import datasets
+from artificial import graph1
+from impl import models, SubGDataset, train, metrics, utils, config
 from impl.models import SpectralNet
 
 parser = argparse.ArgumentParser(description='')
@@ -52,34 +52,7 @@ if args.use_seed:
     torch.backends.cudnn.enabled = False
 
 # baseG = datasets.load_dataset(args.dataset)
-num_node = 10
-x = torch.empty((num_node, 1, 0))
-
-rawedge = nx.read_edgelist(f"./artificial/graph1/edgelist.txt").edges
-edge_index = torch.tensor([[int(i[0]), int(i[1])]
-                                   for i in rawedge]).t()
-
-train_sub_G = [[1, 2, 3, 4], [6, 7, 8, 9], [0, 1, 6, 7], [5, 6, 1, 2], [0, 1], [5, 6], [0, 1, 2], [5, 7, 9]]
-val_sub_G = train_sub_G
-test_sub_G = train_sub_G
-train_sub_G_label = torch.Tensor([0, 0, 1, 1, 2, 2, 3, 3])
-val_sub_G_label = train_sub_G_label
-test_sub_G_label = train_sub_G_label
-
-mask = torch.cat(
-    (torch.zeros(len(train_sub_G_label), dtype=torch.int64),
-     torch.ones(len(val_sub_G_label), dtype=torch.int64),
-     2 * torch.ones(len(test_sub_G_label))),
-    dim=0)
-
-label = torch.cat(
-                (train_sub_G_label, val_sub_G_label, test_sub_G_label))
-pos = pad_sequence(
-            [torch.tensor(i) for i in train_sub_G + val_sub_G + test_sub_G],
-            batch_first=True,
-            padding_value=-1)
-baseG = datasets.BaseGraph(x, edge_index, torch.ones(edge_index.shape[1]), pos,
-                           label.to(torch.float), mask)
+baseG = graph1.load_dataset()
 
 # final_pos = []
 # finalY = []
