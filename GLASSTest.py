@@ -2,16 +2,15 @@ import argparse
 import random
 import time
 
-import networkx as nx
 import numpy as np
 import torch
 import torch.nn as nn
 import yaml
+from matplotlib import pyplot as plt
+from matplotlib.pyplot import figure
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
-from torch.nn.utils.rnn import pad_sequence
 from torch.optim import Adam, lr_scheduler
 
-import datasets
 from artificial import graph1
 from impl import models, SubGDataset, train, metrics, utils, config
 from impl.models import SpectralNet
@@ -308,10 +307,15 @@ def test(pool="size",
         tst_score = 0
         early_stop = 0
         trn_time = []
+        training_losses = []
+        epochs = []
         for i in range(10000):
             t1 = time.time()
             loss = train.train(optimizer, gnn, trn_dataset, train_subgraph_assignment, loss_fn)
             trn_time.append(time.time() - t1)
+            if i % 10 == 0:
+                training_losses.append(loss.detach().numpy())
+                epochs.append(i)
             scd.step(loss)
 
             if i >= 1:
@@ -357,6 +361,12 @@ def test(pool="size",
             f"end: epoch {i+1}, train time {sum(trn_time):.2f} s, val {val_score:.3f}, tst {tst_score:.3f}",
             flush=True)
         outs.append(tst_score)
+        figure(figsize=(8, 6))
+        plt.plot(np.array(epochs), np.array(training_losses))
+        # plt.xticks(ticks=[0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500, 8000, 8500, 9000, 9500, 10000])
+        plt.xlabel("Epochs")
+        plt.ylabel("Training loss")
+        plt.show()
     print(
         f"average {np.average(outs):.3f} error {np.std(outs) / np.sqrt(len(outs)):.3f}"
     )
