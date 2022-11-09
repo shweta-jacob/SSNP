@@ -7,14 +7,14 @@ def load_dataset():
     num_node = 10
     x = torch.empty((num_node, 1, 0))
 
-    rawedge = nx.read_edgelist(f"./artificial/graph1/edgelist.txt").edges
+    rawedge = nx.read_edgelist(f"./artificial/graph2/edgelist.txt").edges
     edge_index = torch.tensor([[int(i[0]), int(i[1])]
                                        for i in rawedge]).t()
 
-    train_sub_G = [[1, 2, 3, 4], [6, 7, 8, 9], [0, 1, 6, 7], [5, 6, 1, 2]]
+    train_sub_G = [[1, 2, 3, 4], [6, 7, 8, 9], [0, 1, 6, 7], [5, 6, 1, 2], [0, 1], [5, 6], [0, 1, 2], [5, 7, 9]]
     val_sub_G = train_sub_G
     test_sub_G = train_sub_G
-    train_sub_G_label = torch.Tensor([0, 0, 1, 1])
+    train_sub_G_label = torch.Tensor([0, 0, 1, 1, 2, 2, 3, 3])
     val_sub_G_label = train_sub_G_label
     test_sub_G_label = train_sub_G_label
 

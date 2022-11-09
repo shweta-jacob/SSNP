@@ -8,7 +8,7 @@ def train(optimizer, model, dataset, subgraph_assignment, loss_fn):
     model.train()
     optimizer.zero_grad()
     pred, mc_loss, o_loss = model(dataset.x, dataset.edge_index, dataset.edge_attr, dataset.pos, subgraph_assignment)
-    loss = loss_fn(pred, dataset.y) + 0.5 * (mc_loss + o_loss)
+    loss = loss_fn(pred, dataset.y) + 1 * (mc_loss + o_loss)
     loss.backward()
     optimizer.step()
     return loss
