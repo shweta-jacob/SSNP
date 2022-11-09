@@ -247,6 +247,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
     #                    torch.nn.ModuleList([pool_fn1])).to(config.device)
 
     num_clusters = 2
+    print(f'Number of clusters: {num_clusters}')
     gnn = SpectralNet(input_channels,
                       hidden_dim,
                       output_channels,
