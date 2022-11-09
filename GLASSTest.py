@@ -121,6 +121,7 @@ if baseG.y.unique().shape[0] == 2:
     def loss_fn(x, y):
         return BCEWithLogitsLoss()(x.flatten(), y.flatten())
 
+
     baseG.y = baseG.y.to(torch.float)
     if baseG.y.ndim > 1:
         output_channels = baseG.y.shape[1]
@@ -310,9 +311,15 @@ def test(pool="size",
         trn_time = []
         training_losses = []
         epochs = []
+        classification_losses = []
+        clustering_losses = []
         for i in range(10000):
             t1 = time.time()
-            loss = train.train(optimizer, gnn, trn_dataset, train_subgraph_assignment, loss_fn)
+            loss, classification_loss, clustering_loss = train.train(optimizer, gnn, trn_dataset,
+                                                                     train_subgraph_assignment, loss_fn,
+                                                                     classification_losses, clustering_losses)
+            classification_losses.append(classification_loss)
+            clustering_losses.append(clustering_loss)
             trn_time.append(time.time() - t1)
             if i % 10 == 0:
                 training_losses.append(loss.detach().numpy())
@@ -359,7 +366,7 @@ def test(pool="size",
             # if early_stop > 1000:
             #     break
         print(
-            f"end: epoch {i+1}, train time {sum(trn_time):.2f} s, val {val_score:.3f}, tst {tst_score:.3f}",
+            f"end: epoch {i + 1}, train time {sum(trn_time):.2f} s, val {val_score:.3f}, tst {tst_score:.3f}",
             flush=True)
         outs.append(tst_score)
         figure(figsize=(8, 6))
