@@ -35,8 +35,8 @@ args = parser.parse_args()
 config.set_device(args.device)
 
 
-def set_seed(seed: int):
-    print("seed ", seed)
+def set_seed(seed: int, f):
+    print("seed ", seed, file=f)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -45,7 +45,8 @@ def set_seed(seed: int):
 
 
 if args.use_seed:
-    set_seed(0)
+    f = open('output.log', 'w')
+    set_seed(0, f)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.enabled = False
@@ -202,7 +203,7 @@ def split():
             return SubGDataset.GDataloader(ds, bs, shuffle=True)
 
 
-def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
+def buildModel(f, hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
     '''
     Build a GLASS model.
     Args:
@@ -248,7 +249,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
     #                    torch.nn.ModuleList([pool_fn1])).to(config.device)
 
     num_clusters = 2
-    print(f'Number of clusters: {num_clusters}')
+    print(f'Number of clusters: {num_clusters}', file=f)
     gnn = SpectralNet(input_channels,
                       hidden_dim,
                       output_channels,
@@ -267,7 +268,8 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
     return gnn
 
 
-def test(pool="size",
+def test(f,
+         pool="size",
          aggr="mean",
          hidden_dim=64,
          conv_layer=8,
@@ -294,9 +296,9 @@ def test(pool="size",
 
     outs = []
     for repeat in range(args.repeat):
-        set_seed((1 << repeat) - 1)
-        print(f"repeat {repeat}")
-        gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio,
+        set_seed((1 << repeat) - 1, f)
+        print(f"repeat {repeat}", file=f)
+        gnn = buildModel(f, hidden_dim, conv_layer, dropout, jk, pool, z_ratio,
                          aggr)
         # trn_loader = loader_fn(trn_dataset, batch_size)
         # val_loader = tloader_fn(val_dataset, batch_size)
@@ -344,7 +346,7 @@ def test(pool="size",
                     tst_score = score
                     print(
                         f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {tst_score:.4f}",
-                        flush=True)
+                        flush=True, file=f)
                 elif score >= val_score - 1e-5:
                     score, _ = train.test(gnn,
                                           tst_dataset,
@@ -354,20 +356,20 @@ def test(pool="size",
                     tst_score = max(score, tst_score)
                     print(
                         f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {score:.4f}",
-                        flush=True)
+                        flush=True, file=f)
                 else:
                     early_stop += 1
                     if i % 10 == 0:
                         print(
                             f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_dataset, test_subgraph_assignment, score_fn, loss_fn=loss_fn)[0]:.4f}",
-                            flush=True)
+                            flush=True, file=f)
             if val_score >= 1 - 1e-5:
                 early_stop += 1
             # if early_stop > 1000:
             #     break
         print(
             f"end: epoch {i + 1}, train time {sum(trn_time):.2f} s, val {val_score:.3f}, tst {tst_score:.3f}",
-            flush=True)
+            flush=True, file=f)
         outs.append(tst_score)
         figure(figsize=(8, 6))
         plt.plot(np.array(epochs), np.array(training_losses))
@@ -376,15 +378,17 @@ def test(pool="size",
         plt.ylabel("Training loss")
         plt.show()
     print(
-        f"average {np.average(outs):.3f} error {np.std(outs) / np.sqrt(len(outs)):.3f}"
+        f"average {np.average(outs):.3f} error {np.std(outs) / np.sqrt(len(outs)):.3f}", file=f
     )
 
 
-print(args)
-# read configuration
-with open(f"config/{args.dataset}.yml") as f:
-    params = yaml.safe_load(f)
+with open('output.log', 'w') as out_file:
+    print(args, file=out_file)
+    # read configuration
+    with open(f"config/{args.dataset}.yml") as f:
+        params = yaml.safe_load(f)
 
-print("params", params, flush=True)
-split()
-test(**(params))
+    print("params", params, flush=True, file=out_file)
+    split()
+    test(out_file, **(params))
+f.close()
