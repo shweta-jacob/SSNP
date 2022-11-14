@@ -40,7 +40,7 @@ class MLP(nn.Module):
                  hidden_channels: int,
                  output_channels: int,
                  num_layers: int,
-                 dropout=0,
+                 dropout: float = 0,
                  tail_activation=False,
                  activation=nn.ReLU(inplace=True),
                  gn=False):
@@ -159,11 +159,7 @@ class GLASSConv(torch.nn.Module):
         x = self.activation(self.trans_fns[0](x_))
         # pass messages.
         x = self.adj @ x
-        # x = self.gn(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
-        # x = torch.cat((x, x_), dim=-1)
-
-        # x = self.comb_fns[0](x)
         return x
 
 
@@ -399,21 +395,9 @@ class SpectralNet(torch.nn.Module):
             self.gns = None
         self.mlp = Linear(hidden_channels * num_layers, num_clusters)
         self.num_layers = num_layers
-        # self.k = num_clusters
-        # conv1d_channels = [32, 32]
-        # total_latent_dim = hidden_channels * num_layers
-        # conv1d_kws = [total_latent_dim, 5]
-        # self.conv1 = Conv1d(1, conv1d_channels[0], conv1d_kws[0],
-        #                     conv1d_kws[0])
-        # self.maxpool1d = MaxPool1d(2, 2)
-        # self.conv2 = Conv1d(conv1d_channels[0], conv1d_channels[1],
-        #                     conv1d_kws[1], 1)
-        # dense_dim = int((self.k - 2) / 2 + 1)
-        #
-        # dense_dim = (dense_dim - conv1d_kws[1] + 1) * conv1d_channels[1]
         self.preds = torch.nn.ModuleList([MLP(input_channels=((hidden_channels * num_layers + 1) * num_clusters),
                                               hidden_channels=2 * hidden_channels, output_channels=output_channels,
-                                              num_layers=4)])
+                                              num_layers=4, dropout=0.5)])
 
         self.reset_parameters()
 

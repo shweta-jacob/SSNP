@@ -11,6 +11,7 @@ from matplotlib.pyplot import figure
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 from torch.optim import Adam, lr_scheduler
 
+import datasets
 from artificial import graph1, graph3, graph4, graph5, graph2, graph7
 from impl import models, SubGDataset, train, metrics, utils, config
 from impl.models import SpectralNet
