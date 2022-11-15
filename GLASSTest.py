@@ -53,7 +53,7 @@ if args.use_seed:
     torch.backends.cudnn.enabled = False
 
 # baseG = datasets.load_dataset(args.dataset)
-baseG = graph1.load_dataset()
+baseG = graph7.load_dataset()
 
 # final_pos = []
 # finalY = []
@@ -204,7 +204,7 @@ def split():
             return SubGDataset.GDataloader(ds, bs, shuffle=True)
 
 
-def buildModel(f, hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
+def buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_ratio, aggr):
     '''
     Build a GLASS model.
     Args:
@@ -214,7 +214,7 @@ def buildModel(f, hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
         z_ratio: see GLASSConv in impl/model.py. Z_ratio in [0.5, 1].
         aggr: aggregation method. mean, sum, or gcn. 
     '''
-    input_channels = hidden_dim
+    input_channels = hidden_dim1
     # if args.use_nodeid:
     #     input_channels = 64
     # conv = models.EmbZGConv(hidden_dim,
@@ -249,13 +249,16 @@ def buildModel(f, hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
     # gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]),
     #                    torch.nn.ModuleList([pool_fn1])).to(config.device)
 
-    num_clusters = 2
-    print(f'Number of clusters: {num_clusters}', file=f)
+    num_clusters1 = 5
+    num_clusters2 = 2
+    print(f'Number of clusters in each layer: {num_clusters1}, {num_clusters2}', file=f)
     gnn = SpectralNet(input_channels,
-                      hidden_dim,
+                      hidden_dim1,
+                      hidden_dim2,
                       output_channels,
                       conv_layer,
-                      num_clusters,
+                      num_clusters1,
+                      num_clusters2,
                       max_deg=max_deg,
                       activation=nn.ELU(inplace=True),
                       jk=jk).to(config.device)
@@ -272,7 +275,8 @@ def buildModel(f, hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
 def test(f,
          pool="size",
          aggr="mean",
-         hidden_dim=64,
+         hidden_dim1=64,
+         hidden_dim2=64,
          conv_layer=8,
          dropout=0.3,
          jk=1,
@@ -299,7 +303,7 @@ def test(f,
     for repeat in range(args.repeat):
         set_seed((1 << repeat) - 1, f)
         print(f"repeat {repeat}", file=f)
-        gnn = buildModel(f, hidden_dim, conv_layer, dropout, jk, pool, z_ratio,
+        gnn = buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_ratio,
                          aggr)
         # trn_loader = loader_fn(trn_dataset, batch_size)
         # val_loader = tloader_fn(val_dataset, batch_size)
@@ -330,7 +334,7 @@ def test(f,
             scd.step(loss)
 
             if i >= 1:
-                score, _ = train.test(gnn,
+                score, _ = train.test(f,gnn,
                                       val_dataset,
                                       val_subgraph_assignment,
                                       score_fn,
@@ -339,7 +343,7 @@ def test(f,
                 if score > val_score:
                     early_stop = 0
                     val_score = score
-                    score, _ = train.test(gnn,
+                    score, _ = train.test(f,gnn,
                                           tst_dataset,
                                           test_subgraph_assignment,
                                           score_fn,
@@ -349,7 +353,7 @@ def test(f,
                         f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {tst_score:.4f}",
                         flush=True, file=f)
                 elif score >= val_score - 1e-5:
-                    score, _ = train.test(gnn,
+                    score, _ = train.test(f,gnn,
                                           tst_dataset,
                                           test_subgraph_assignment,
                                           score_fn,
@@ -362,7 +366,7 @@ def test(f,
                     early_stop += 1
                     if i % 10 == 0:
                         print(
-                            f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_dataset, test_subgraph_assignment, score_fn, loss_fn=loss_fn)[0]:.4f}",
+                            f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(f, gnn, tst_dataset, test_subgraph_assignment, score_fn, loss_fn=loss_fn)[0]:.4f}",
                             flush=True, file=f)
             if val_score >= 1 - 1e-5:
                 early_stop += 1
@@ -391,5 +395,5 @@ with open('output.log', 'w') as out_file:
 
     print("params", params, flush=True, file=out_file)
     split()
-    test(out_file, **(params))
+    test(out_file, **params)
 f.close()

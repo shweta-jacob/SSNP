@@ -349,14 +349,15 @@ class GLASS(nn.Module):
 class SpectralNet(torch.nn.Module):
     def __init__(self,
                  input_channels,
-                 hidden_channels,
+                 hidden_channels1,
+                 hidden_channels2,
                  output_channels,
                  num_layers,
-                 num_clusters,
+                 num_clusters1,
+                 num_clusters2,
                  max_deg,
                  dropout=0,
                  activation=nn.ReLU(),
-                 conv=GLASSConv,
                  gn=True,
                  jk=False,
                  **kwargs):
@@ -365,38 +366,21 @@ class SpectralNet(torch.nn.Module):
                                       input_channels,
                                       scale_grad_by_freq=False)
         self.emb_gn = GraphNorm(input_channels)
-        self.num_clusters = num_clusters
-        self.hidden_channels = hidden_channels
+        self.num_clusters1 = num_clusters1
+        self.num_clusters2 = num_clusters2
+        self.hidden_channels1 = hidden_channels1
+        self.hidden_channels2 = hidden_channels2
         self.convs = nn.ModuleList()
         self.jk = jk
-        self.convs.append(
-            conv(in_channels=input_channels,
-                 out_channels=hidden_channels,
-                 activation=activation,
-                 **kwargs))
-        for _ in range(num_layers - 1):
-            self.convs.append(
-                conv(in_channels=hidden_channels,
-                     out_channels=hidden_channels,
-                     activation=activation,
-                     **kwargs))
+        self.conv1 = GLASSConv(in_channels=input_channels, out_channels=hidden_channels1, activation=activation, **kwargs)
+        self.conv2 = GLASSConv(in_channels=hidden_channels1, out_channels=hidden_channels2, activation=activation, **kwargs)
         self.activation = activation
         self.dropout = dropout
-        if gn:
-            self.gns = nn.ModuleList()
-            for _ in range(num_layers - 1):
-                self.gns.append(GraphNorm(hidden_channels))
-            if self.jk:
-                self.gns.append(
-                    GraphNorm(num_layers * hidden_channels))
-            else:
-                self.gns.append(GraphNorm(output_channels))
-        else:
-            self.gns = None
-        self.mlp = Linear(hidden_channels * num_layers, num_clusters)
+        self.mlp1 = Linear(hidden_channels1, num_clusters1)
+        self.mlp2 = Linear(hidden_channels2, num_clusters2)
         self.num_layers = num_layers
-        self.preds = torch.nn.ModuleList([MLP(input_channels=((hidden_channels * num_layers + 1) * num_clusters),
-                                              hidden_channels=2 * hidden_channels, output_channels=output_channels,
+        self.preds = torch.nn.ModuleList([MLP(input_channels=((num_clusters1 * (hidden_channels1 + 1)) + (num_clusters2 * (hidden_channels2 + 1))),
+                                              hidden_channels=2 * hidden_channels2, output_channels=output_channels,
                                               num_layers=4, dropout=0.5)])
 
         self.reset_parameters()
@@ -404,11 +388,12 @@ class SpectralNet(torch.nn.Module):
     def reset_parameters(self):
         self.input_emb.reset_parameters()
         self.emb_gn.reset_parameters()
-        for conv in self.convs:
-            conv.reset_parameters()
-        if not (self.gns is None):
-            for gn in self.gns:
-                gn.reset_parameters()
+        # for conv in self.convs:
+        self.conv1.reset_parameters()
+        self.conv2.reset_parameters()
+        # if not (self.gns is None):
+        #     for gn in self.gns:
+        #         gn.reset_parameters()
 
     def forward(self, x, edge_index, edge_weight, pos, subgraph_assignment):
         # Propagate node feats
@@ -416,56 +401,68 @@ class SpectralNet(torch.nn.Module):
         x = self.emb_gn(x)
         # x = self.convs[-1](x, edge_index, edge_weight)
         # x = self.activation(x)
-
-        xs = []
-
-        for layer, conv in enumerate(self.convs[:-1]):
-            x = conv(x, edge_index, edge_weight)
-            xs.append(x)
-            if not (self.gns is None):
-                x = self.gns[layer](x)
-            x = self.activation(x)
-            x = F.dropout(x, p=self.dropout, training=self.training)
-        x = self.convs[-1](x, edge_index, edge_weight)
-        xs.append(x)
-
-        if self.jk:
-            x = torch.cat(xs, dim=-1)
-            if not (self.gns is None):
-                x = self.gns[-1](x)
+        x = self.conv1(x, edge_index, edge_weight)
+        x = self.activation(x)
 
         # Cluster assignments (logits)
-        s = self.mlp(x)
-        updated_s = torch.zeros(x.shape[0], self.num_clusters)
+        s = self.mlp1(x)
+        updated_s = torch.zeros(x.shape[0], self.num_clusters1)
         # updated_s = torch.softmax(s, dim=-1)
         for idx, row in enumerate(s):
             max_idx = list(row).index(max(row))
             updated_s[idx] = torch.Tensor([1 if val == row[max_idx] else 0 for val in row])
         l = torch.transpose(subgraph_assignment, 0, 1)
         subgraph_to_cluster = F.normalize(torch.transpose(torch.softmax(s, dim=-1), 0, 1), p=1, dim=1) @ l
+        unnormalised_subgraph_to_cluster = torch.transpose(torch.softmax(s, dim=-1), 0, 1) @ l
         adj = utils.to_dense_adj(edge_index, edge_attr=edge_weight)
-        out, out_adj, mc_loss, o_loss = dense_mincut_pool(x, adj, s)
-        out = out.reshape(self.num_clusters, self.hidden_channels * self.num_layers)
+        out, out_adj, mc_loss1, o_loss1 = dense_mincut_pool(x, adj, s)
+        out = out.reshape(self.num_clusters1, self.hidden_channels1)
 
         # preds = []
         embs = []
         for idx, subgraph in enumerate(pos):
             r = subgraph_to_cluster[:, idx]
-            x = torch.cat([out, r.reshape(self.num_clusters, 1)], dim=-1)
+            x = torch.cat([out, r.reshape(self.num_clusters1, 1)], dim=-1)
             # x = out * r.reshape(self.num_clusters, 1)
             pooled_features = x[x[:, -1].sort(descending=True)[1]]
             # pooled_features = x
-            pooled_features = pooled_features.reshape(1, self.num_clusters * (self.hidden_channels * self.num_layers + 1))  # [num_graphs, 1, k * hidden]
+            pooled_features = pooled_features.reshape(1, self.num_clusters1 * (self.hidden_channels1 + 1))  # [num_graphs, 1, k * hidden]
             embs.append(pooled_features)
         emb = torch.stack(embs, dim=0)
-        emb = emb.reshape(len(pos), self.num_clusters * (self.hidden_channels * self.num_layers + 1))
-        # Obtain MinCutPool losses
-        # pooled_features = F.relu(self.conv1(pooled_features))
-        # pooled_features = self.maxpool1d(pooled_features)
-        # pooled_features = F.relu(self.conv2(pooled_features))
-        # pooled_features = pooled_features.view(pooled_features.size(0), -1)
+        emb1 = emb.reshape(len(pos), self.num_clusters1 * (self.hidden_channels1 + 1))
 
-        return self.preds[0](emb), mc_loss, o_loss
+        edge_index = out_adj.reshape(self.num_clusters1, self.num_clusters1).nonzero().t().contiguous()
+        edge_weight = torch.ones(edge_index[0].shape)
+        x = self.conv2(out, edge_index, edge_weight)
+
+        # Cluster assignments (logits)
+        s = self.mlp2(x)
+        updated_s = torch.zeros(x.shape[0], self.num_clusters2)
+        # updated_s = torch.softmax(s, dim=-1)
+        for idx, row in enumerate(s):
+            max_idx = list(row).index(max(row))
+            updated_s[idx] = torch.Tensor([1 if val == row[max_idx] else 0 for val in row])
+        l = unnormalised_subgraph_to_cluster
+        subgraph_to_cluster = F.normalize(torch.transpose(torch.softmax(s, dim=-1), 0, 1), p=1, dim=1) @ l
+        adj = utils.to_dense_adj(edge_index, edge_attr=edge_weight)
+        out, out_adj, mc_loss2, o_loss2 = dense_mincut_pool(x, adj, s)
+        out = out.reshape(self.num_clusters2, self.hidden_channels2)
+
+        # preds = []
+        embs = []
+        for idx, subgraph in enumerate(pos):
+            r = subgraph_to_cluster[:, idx]
+            x = torch.cat([out, r.reshape(self.num_clusters2, 1)], dim=-1)
+            # x = out * r.reshape(self.num_clusters, 1)
+            pooled_features = x[x[:, -1].sort(descending=True)[1]]
+            # pooled_features = x
+            pooled_features = pooled_features.reshape(1, self.num_clusters2 * (
+                        self.hidden_channels2 + 1))  # [num_graphs, 1, k * hidden]
+            embs.append(pooled_features)
+        emb = torch.stack(embs, dim=0)
+        emb2 = emb.reshape(len(pos), self.num_clusters2 * (self.hidden_channels2 + 1))
+
+        return self.preds[0](torch.cat([emb1, emb2], dim=-1)), mc_loss1 + mc_loss2, o_loss1 + o_loss2
 
 class MyGCNConv(torch.nn.Module):
     '''

@@ -2,7 +2,8 @@ aggr: sum
 batch_size: 3
 conv_layer: 1
 dropout: 0.3
-hidden_dim: 15
+hidden_dim1: 15
+hidden_dim2: 15
 lr: 0.01
 pool: mean
 resi: 0.9

@@ -24,7 +24,7 @@ def train(optimizer, model, dataset, subgraph_assignment, loss_fn, total_class_l
 
 
 @torch.no_grad()
-def test(model, dataset, subgraph_assignment, metrics, loss_fn):
+def test(f, model, dataset, subgraph_assignment, metrics, loss_fn):
     '''
     Test models either on validation dataset or test dataset.
     '''
@@ -36,4 +36,5 @@ def test(model, dataset, subgraph_assignment, metrics, loss_fn):
     ys.append(dataset.y)
     pred = torch.cat(preds, dim=0)
     y = torch.cat(ys, dim=0)
+    # print(pred.cpu().numpy(), file=f)
     return metrics(pred.cpu().numpy(), y.cpu().numpy()), loss_fn(pred, y) + (mc_loss + o_loss)
