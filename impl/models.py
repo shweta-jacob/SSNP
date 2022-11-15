@@ -432,7 +432,8 @@ class SpectralNet(torch.nn.Module):
         emb1 = emb.reshape(len(pos), self.num_clusters1 * (self.hidden_channels1 + 1))
 
         edge_index = out_adj.reshape(self.num_clusters1, self.num_clusters1).nonzero().t().contiguous()
-        edge_weight = torch.ones(edge_index[0].shape)
+        all_edge_weights = torch.flatten(out_adj.reshape(self.num_clusters1, self.num_clusters1))
+        edge_weight = all_edge_weights[torch.nonzero(all_edge_weights)].reshape(edge_index[0].shape,)
         x = self.conv2(out, edge_index, edge_weight)
 
         # Cluster assignments (logits)
