@@ -380,7 +380,7 @@ class SpectralNet(torch.nn.Module):
         self.mlp2 = Linear(hidden_channels2, num_clusters2)
         self.num_layers = num_layers
         self.k1 = 10
-        self.k2 = 5
+        self.k2 = 10
         self.global_sort1 = aggr.SortAggregation(k=self.k1)
         self.global_sort2 = aggr.SortAggregation(k=self.k2)
 
@@ -411,6 +411,7 @@ class SpectralNet(torch.nn.Module):
 
         # Cluster assignments (logits)
         s = self.mlp1(x)
+        ent_loss1 = (-torch.softmax(s, dim=-1) * torch.log(torch.softmax(s, dim=-1) + 1e-15)).sum(dim=-1).mean()
         l = torch.transpose(subgraph_assignment, 0, 1)
         subgraph_to_cluster = F.normalize(torch.transpose(torch.softmax(s, dim=-1), 0, 1), p=1, dim=1) @ l
         adj = utils.to_dense_adj(edge_index, edge_attr=edge_weight)
@@ -440,6 +441,7 @@ class SpectralNet(torch.nn.Module):
 
         # Cluster assignments (logits)
         s = self.mlp2(x)
+        ent_loss2 = (-torch.softmax(s, dim=-1) * torch.log(torch.softmax(s, dim=-1) + 1e-15)).sum(dim=-1).mean()
         subgraph_to_cluster = F.normalize(torch.transpose(torch.softmax(s, dim=-1), 0, 1), p=1, dim=1) @ l
         adj = utils.to_dense_adj(edge_index, edge_attr=edge_weight)
         out, out_adj, mc_loss2, o_loss2 = dense_mincut_pool(x, adj, s)
@@ -462,7 +464,7 @@ class SpectralNet(torch.nn.Module):
         emb = torch.stack(embs, dim=0)
         emb2 = emb.reshape(len(pos), self.k2 * (self.hidden_channels2 + 1))
 
-        return self.preds[0](torch.cat([emb1, emb2], dim=-1)), mc_loss1 + mc_loss2, o_loss1 + o_loss2
+        return self.preds[0](torch.cat([emb1, emb2], dim=-1)), mc_loss1 + mc_loss2, o_loss1 + o_loss2, ent_loss1 + ent_loss2
 
 class MyGCNConv(torch.nn.Module):
     '''
