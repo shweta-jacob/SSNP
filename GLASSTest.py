@@ -235,22 +235,22 @@ def buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_rat
     # mlp = nn.Linear(hidden_dim * (conv_layer) if jk else hidden_dim,
     #                 output_channels)
 
-    pool_fn_fn = {
-        "mean": models.MeanPool,
-        "max": models.MaxPool,
-        "sum": models.AddPool,
-        "size": models.SizePool
-    }
-    if pool in pool_fn_fn:
-        pool_fn1 = pool_fn_fn[pool]()
-    else:
-        raise NotImplementedError
+    # pool_fn_fn = {
+    #     "mean": models.MeanPool,
+    #     "max": models.MaxPool,
+    #     "sum": models.AddPool,
+    #     "size": models.SizePool
+    # }
+    # if pool in pool_fn_fn:
+    #     pool_fn1 = pool_fn_fn[pool]()
+    # else:
+    #     raise NotImplementedError
 
     # gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]),
     #                    torch.nn.ModuleList([pool_fn1])).to(config.device)
 
-    num_clusters1 = 5
-    num_clusters2 = 2
+    num_clusters1 = 1000
+    num_clusters2 = 400
     print(f'Number of clusters in each layer: {num_clusters1}, {num_clusters2}', file=f)
     gnn = SpectralNet(input_channels,
                       hidden_dim1,

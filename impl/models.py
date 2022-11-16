@@ -4,8 +4,8 @@ import torch.nn.functional as F
 from torch.nn import Linear
 from torch_geometric import utils
 from torch_geometric.nn import GCNConv, dense_mincut_pool
-from torch_geometric.nn.glob.glob import global_mean_pool, global_add_pool, global_max_pool
-from torch_geometric.nn.norm import GraphNorm, GraphSizeNorm
+from torch_geometric.nn import aggr
+from torch_geometric.nn.norm import GraphNorm
 
 from .utils import pad2batch
 
@@ -281,31 +281,31 @@ class PoolModule(nn.Module):
         return self.pool_fn(x, batch)
 
 
-class AddPool(PoolModule):
-    def __init__(self, trans_fn=None):
-        super().__init__(global_add_pool, trans_fn)
+# class AddPool(PoolModule):
+#     def __init__(self, trans_fn=None):
+#         super().__init__(global_add_pool, trans_fn)
+#
+#
+# class MaxPool(PoolModule):
+#     def __init__(self, trans_fn=None):
+#         super().__init__(global_max_pool, trans_fn)
+#
+#
+# class MeanPool(PoolModule):
+#     def __init__(self, trans_fn=None):
+#         super().__init__(global_mean_pool, trans_fn)
 
 
-class MaxPool(PoolModule):
-    def __init__(self, trans_fn=None):
-        super().__init__(global_max_pool, trans_fn)
-
-
-class MeanPool(PoolModule):
-    def __init__(self, trans_fn=None):
-        super().__init__(global_mean_pool, trans_fn)
-
-
-class SizePool(AddPool):
-    def __init__(self, trans_fn=None):
-        super().__init__(trans_fn)
-
-    def forward(self, x, batch):
-        if x is not None:
-            if self.trans_fn is not None:
-                x = self.trans_fn(x)
-        x = GraphSizeNorm()(x, batch)
-        return self.pool_fn(x, batch)
+# class SizePool(AddPool):
+#     def __init__(self, trans_fn=None):
+#         super().__init__(trans_fn)
+#
+#     def forward(self, x, batch):
+#         if x is not None:
+#             if self.trans_fn is not None:
+#                 x = self.trans_fn(x)
+#         x = GraphSizeNorm()(x, batch)
+#         return self.pool_fn(x, batch)
 
 
 class GLASS(nn.Module):
@@ -379,7 +379,12 @@ class SpectralNet(torch.nn.Module):
         self.mlp1 = Linear(hidden_channels1, num_clusters1)
         self.mlp2 = Linear(hidden_channels2, num_clusters2)
         self.num_layers = num_layers
-        self.preds = torch.nn.ModuleList([MLP(input_channels=((num_clusters1 * (hidden_channels1 + 1)) + (num_clusters2 * (hidden_channels2 + 1))),
+        self.k1 = 10
+        self.k2 = 5
+        self.global_sort1 = aggr.SortAggregation(k=self.k1)
+        self.global_sort2 = aggr.SortAggregation(k=self.k2)
+
+        self.preds = torch.nn.ModuleList([MLP(input_channels=((self.k1 * (self.hidden_channels1 + 1) + self.k2 * (self.hidden_channels2 + 1))),
                                               hidden_channels=2 * hidden_channels2, output_channels=output_channels,
                                               num_layers=4, dropout=0.5)])
 
@@ -418,12 +423,15 @@ class SpectralNet(torch.nn.Module):
             r = subgraph_to_cluster[:, idx]
             x = torch.cat([out, r.reshape(self.num_clusters1, 1)], dim=-1)
             # x = out * r.reshape(self.num_clusters, 1)
-            pooled_features = x[x[:, -1].sort(descending=True)[1]]
-            # pooled_features = x
-            pooled_features = pooled_features.reshape(1, self.num_clusters1 * (self.hidden_channels1 + 1))  # [num_graphs, 1, k * hidden]
-            embs.append(pooled_features)
+            # pooled_features = x[x[:, -1].sort(descending=True)[1]]
+            # # pooled_features = x
+            # pooled_features = pooled_features.reshape(1, self.num_clusters1 * (self.hidden_channels1 + 1))  # [num_graphs, 1, k * hidden]
+            # embs.append(pooled_features)
+            x = self.global_sort1(x)
+            x = x.reshape(self.k1 * (self.hidden_channels1 + 1), 1)
+            embs.append(x)
         emb = torch.stack(embs, dim=0)
-        emb1 = emb.reshape(len(pos), self.num_clusters1 * (self.hidden_channels1 + 1))
+        emb1 = emb.reshape(len(pos), self.k1 * (self.hidden_channels1 + 1))
 
         # edge_index = out_adj.reshape(self.num_clusters1, self.num_clusters1).nonzero().t().contiguous()
         # all_edge_weights = torch.flatten(out_adj.reshape(self.num_clusters1, self.num_clusters1))
@@ -443,13 +451,16 @@ class SpectralNet(torch.nn.Module):
             r = subgraph_to_cluster[:, idx]
             x = torch.cat([out, r.reshape(self.num_clusters2, 1)], dim=-1)
             # x = out * r.reshape(self.num_clusters, 1)
-            pooled_features = x[x[:, -1].sort(descending=True)[1]]
-            # pooled_features = x
-            pooled_features = pooled_features.reshape(1, self.num_clusters2 * (
-                        self.hidden_channels2 + 1))  # [num_graphs, 1, k * hidden]
-            embs.append(pooled_features)
+            # pooled_features = x[x[:, -1].sort(descending=True)[1]]
+            # # pooled_features = x
+            # pooled_features = pooled_features.reshape(1, self.num_clusters2 * (
+            #             self.hidden_channels2 + 1))  # [num_graphs, 1, k * hidden]
+            # embs.append(pooled_features)
+            x = self.global_sort2(x)
+            x = x.reshape(self.k2 * (self.hidden_channels2 + 1))
+            embs.append(x)
         emb = torch.stack(embs, dim=0)
-        emb2 = emb.reshape(len(pos), self.num_clusters2 * (self.hidden_channels2 + 1))
+        emb2 = emb.reshape(len(pos), self.k2 * (self.hidden_channels2 + 1))
 
         return self.preds[0](torch.cat([emb1, emb2], dim=-1)), mc_loss1 + mc_loss2, o_loss1 + o_loss2
 
