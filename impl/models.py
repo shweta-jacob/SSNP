@@ -343,7 +343,14 @@ class GLASS(nn.Module):
         emb = self.Pool(emb, subG_node, self.pools[id])
         return self.preds[id](emb)
 
+def _rank3_trace(x):
+    return torch.einsum('ijj->i', x)
 
+
+def _rank3_diag(x):
+    eye = torch.eye(x.size(1)).type_as(x)
+    out = eye * x.unsqueeze(2).expand(*x.size(), x.size(1))
+    return out
 # models used for producing node embeddings.
 
 class SpectralNet(torch.nn.Module):
@@ -411,13 +418,31 @@ class SpectralNet(torch.nn.Module):
 
         # Cluster assignments (logits)
         s = self.mlp1(x)
-        ent_loss1 = (-torch.softmax(s, dim=-1) * torch.log(torch.softmax(s, dim=-1) + 1e-15)).sum(dim=-1).mean()
+        # ent_loss1 = (-torch.softmax(s, dim=-1) * torch.log(torch.softmax(s, dim=-1) + 1e-15)).sum(dim=-1).mean()
         l = torch.transpose(subgraph_assignment, 0, 1)
-        subgraph_to_cluster = F.normalize(torch.transpose(torch.softmax(s, dim=-1), 0, 1), p=1, dim=1) @ l
+        subgraph_to_cluster = torch.transpose(torch.softmax(s, dim=-1), 0, 1) @ l
         adj = utils.to_dense_adj(edge_index, edge_attr=edge_weight)
         out, out_adj, mc_loss1, o_loss1 = dense_mincut_pool(x, adj, s)
         out = out.reshape(self.num_clusters1, self.hidden_channels1)
 
+        subgraph_mc_loss1 = 0
+        for idx, subgraph_nodes in enumerate(pos):
+            edge_index_s, edge_attr_s = utils.subgraph(subgraph_nodes, edge_index, edge_weight)
+            if len(edge_attr_s):
+                adj_s = utils.to_dense_adj(edge_index_s, edge_attr=edge_attr_s, max_num_nodes=len(x1))
+                adj_s = adj_s.unsqueeze(0) if adj_s.dim() == 2 else adj_s
+                out_adj_s = torch.matmul(torch.matmul(torch.softmax(s, dim=-1).transpose(0, 1), adj_s), torch.softmax(s, dim=-1))
+                # MinCut regularization.
+                mincut_num = _rank3_trace(out_adj_s)
+                d_flat = torch.einsum('ijk->ij', adj_s)
+                d = _rank3_diag(d_flat)
+                mincut_den = _rank3_trace(
+                    torch.matmul(torch.matmul(s.transpose(0, 1), d), s))
+                mincut_loss = -(mincut_num / mincut_den)
+                mincut_loss = torch.mean(mincut_loss)
+                subgraph_mc_loss1 += mincut_loss
+
+        subgraph_mc_loss1 = subgraph_mc_loss1/len(pos)
         # preds = []
         embs = []
         for idx, subgraph in enumerate(pos):
@@ -441,12 +466,31 @@ class SpectralNet(torch.nn.Module):
 
         # Cluster assignments (logits)
         s = self.mlp2(x)
-        ent_loss2 = (-torch.softmax(s, dim=-1) * torch.log(torch.softmax(s, dim=-1) + 1e-15)).sum(dim=-1).mean()
-        subgraph_to_cluster = F.normalize(torch.transpose(torch.softmax(s, dim=-1), 0, 1), p=1, dim=1) @ l
+        # ent_loss2 = (-torch.softmax(s, dim=-1) * torch.log(torch.softmax(s, dim=-1) + 1e-15)).sum(dim=-1).mean()
+        subgraph_to_cluster = torch.transpose(torch.softmax(s, dim=-1), 0, 1) @ l
         adj = utils.to_dense_adj(edge_index, edge_attr=edge_weight)
         out, out_adj, mc_loss2, o_loss2 = dense_mincut_pool(x, adj, s)
         out = out.reshape(self.num_clusters2, self.hidden_channels2)
 
+        subgraph_mc_loss2 = 0
+        for idx, subgraph_nodes in enumerate(pos):
+            edge_index_s, edge_attr_s = utils.subgraph(subgraph_nodes, edge_index, edge_weight)
+            if len(edge_attr_s):
+                adj_s = utils.to_dense_adj(edge_index_s, edge_attr=edge_attr_s, max_num_nodes=len(x1))
+                adj_s = adj_s.unsqueeze(0) if adj_s.dim() == 2 else adj_s
+                out_adj_s = torch.matmul(torch.matmul(torch.softmax(s, dim=-1).transpose(0, 1), adj_s),
+                                         torch.softmax(s, dim=-1))
+                # MinCut regularization.
+                mincut_num = _rank3_trace(out_adj_s)
+                d_flat = torch.einsum('ijk->ij', adj_s)
+                d = _rank3_diag(d_flat)
+                mincut_den = _rank3_trace(
+                    torch.matmul(torch.matmul(s.transpose(0, 1), d), s))
+                mincut_loss = -(mincut_num / mincut_den)
+                mincut_loss = torch.mean(mincut_loss)
+                subgraph_mc_loss2 += mincut_loss
+
+        subgraph_mc_loss2 = subgraph_mc_loss2 / len(pos)
         # preds = []
         embs = []
         for idx, subgraph in enumerate(pos):
@@ -464,7 +508,7 @@ class SpectralNet(torch.nn.Module):
         emb = torch.stack(embs, dim=0)
         emb2 = emb.reshape(len(pos), self.k2 * (self.hidden_channels2 + 1))
 
-        return self.preds[0](torch.cat([emb1, emb2], dim=-1)), mc_loss1 + mc_loss2, o_loss1 + o_loss2, ent_loss1 + ent_loss2
+        return self.preds[0](torch.cat([emb1, emb2], dim=-1)), mc_loss1 + mc_loss2, o_loss1 + o_loss2, subgraph_mc_loss1 + subgraph_mc_loss2
 
 class MyGCNConv(torch.nn.Module):
     '''
