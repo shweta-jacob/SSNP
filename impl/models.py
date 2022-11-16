@@ -373,7 +373,7 @@ class SpectralNet(torch.nn.Module):
         self.convs = nn.ModuleList()
         self.jk = jk
         self.conv1 = GLASSConv(in_channels=input_channels, out_channels=hidden_channels1, activation=activation, **kwargs)
-        self.conv2 = GLASSConv(in_channels=hidden_channels1, out_channels=hidden_channels2, activation=activation, **kwargs)
+        self.conv2 = GLASSConv(in_channels=input_channels, out_channels=hidden_channels2, activation=activation, **kwargs)
         self.activation = activation
         self.dropout = dropout
         self.mlp1 = Linear(hidden_channels1, num_clusters1)
@@ -397,23 +397,17 @@ class SpectralNet(torch.nn.Module):
 
     def forward(self, x, edge_index, edge_weight, pos, subgraph_assignment):
         # Propagate node feats
-        x = self.input_emb(x).reshape(x.shape[0], -1)
-        x = self.emb_gn(x)
+        x1 = self.input_emb(x).reshape(x.shape[0], -1)
+        x1 = self.emb_gn(x1)
         # x = self.convs[-1](x, edge_index, edge_weight)
         # x = self.activation(x)
-        x = self.conv1(x, edge_index, edge_weight)
+        x = self.conv1(x1, edge_index, edge_weight)
         x = self.activation(x)
 
         # Cluster assignments (logits)
         s = self.mlp1(x)
-        updated_s = torch.zeros(x.shape[0], self.num_clusters1)
-        # updated_s = torch.softmax(s, dim=-1)
-        for idx, row in enumerate(s):
-            max_idx = list(row).index(max(row))
-            updated_s[idx] = torch.Tensor([1 if val == row[max_idx] else 0 for val in row])
         l = torch.transpose(subgraph_assignment, 0, 1)
         subgraph_to_cluster = F.normalize(torch.transpose(torch.softmax(s, dim=-1), 0, 1), p=1, dim=1) @ l
-        unnormalised_subgraph_to_cluster = torch.transpose(torch.softmax(s, dim=-1), 0, 1) @ l
         adj = utils.to_dense_adj(edge_index, edge_attr=edge_weight)
         out, out_adj, mc_loss1, o_loss1 = dense_mincut_pool(x, adj, s)
         out = out.reshape(self.num_clusters1, self.hidden_channels1)
@@ -431,19 +425,13 @@ class SpectralNet(torch.nn.Module):
         emb = torch.stack(embs, dim=0)
         emb1 = emb.reshape(len(pos), self.num_clusters1 * (self.hidden_channels1 + 1))
 
-        edge_index = out_adj.reshape(self.num_clusters1, self.num_clusters1).nonzero().t().contiguous()
-        all_edge_weights = torch.flatten(out_adj.reshape(self.num_clusters1, self.num_clusters1))
-        edge_weight = all_edge_weights[torch.nonzero(all_edge_weights)].reshape(edge_index[0].shape,)
-        x = self.conv2(out, edge_index, edge_weight)
+        # edge_index = out_adj.reshape(self.num_clusters1, self.num_clusters1).nonzero().t().contiguous()
+        # all_edge_weights = torch.flatten(out_adj.reshape(self.num_clusters1, self.num_clusters1))
+        # edge_weight = all_edge_weights[torch.nonzero(all_edge_weights)].reshape(edge_index[0].shape,)
+        x = self.conv2(x1, edge_index, edge_weight)
 
         # Cluster assignments (logits)
         s = self.mlp2(x)
-        updated_s = torch.zeros(x.shape[0], self.num_clusters2)
-        # updated_s = torch.softmax(s, dim=-1)
-        for idx, row in enumerate(s):
-            max_idx = list(row).index(max(row))
-            updated_s[idx] = torch.Tensor([1 if val == row[max_idx] else 0 for val in row])
-        l = unnormalised_subgraph_to_cluster
         subgraph_to_cluster = F.normalize(torch.transpose(torch.softmax(s, dim=-1), 0, 1), p=1, dim=1) @ l
         adj = utils.to_dense_adj(edge_index, edge_attr=edge_weight)
         out, out_adj, mc_loss2, o_loss2 = dense_mincut_pool(x, adj, s)
