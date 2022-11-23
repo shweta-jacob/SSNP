@@ -217,46 +217,18 @@ def buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_rat
     input_channels = hidden_dim1
     # if args.use_nodeid:
     #     input_channels = 64
-    # conv = models.EmbZGConv(hidden_dim,
-    #                         hidden_dim,
-    #                         conv_layer,
-    #                         max_deg=max_deg,
-    #                         activation=nn.ELU(inplace=True),
-    #                         jk=jk,
-    #                         dropout=dropout,
-    #                         conv=functools.partial(models.GLASSConv,
-    #                                                aggr=aggr,
-    #                                                z_ratio=z_ratio,
-    #                                                dropout=dropout),
-    #                         gn=True)
 
-    # use pretrained node embeddings.
-
-    # mlp = nn.Linear(hidden_dim * (conv_layer) if jk else hidden_dim,
-    #                 output_channels)
-
-    # pool_fn_fn = {
-    #     "mean": models.MeanPool,
-    #     "max": models.MaxPool,
-    #     "sum": models.AddPool,
-    #     "size": models.SizePool
-    # }
-    # if pool in pool_fn_fn:
-    #     pool_fn1 = pool_fn_fn[pool]()
-    # else:
-    #     raise NotImplementedError
-
-    # gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]),
-    #                    torch.nn.ModuleList([pool_fn1])).to(config.device)
-
-    num_clusters1 = 1000
-    num_clusters2 = 400
+    num_clusters1 = 500
+    num_clusters2 = 200
+    average_nodes = int(trn_dataset.x.size(0))
+    print(f"Average number of nodes in graph: {average_nodes}")
     print(f'Number of clusters in each layer: {num_clusters1}, {num_clusters2}', file=f)
     gnn = SpectralNet(input_channels,
                       hidden_dim1,
                       hidden_dim2,
                       output_channels,
                       conv_layer,
+                      average_nodes,
                       num_clusters1,
                       num_clusters2,
                       max_deg=max_deg,
