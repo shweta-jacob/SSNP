@@ -408,10 +408,7 @@ class SpectralNet(torch.nn.Module):
         self.global_sort3 = aggr.SortAggregation(k=self.k3)
         self.global_sort4 = aggr.SortAggregation(k=self.k4)
 
-        self.preds = torch.nn.ModuleList([MLP(input_channels=((self.k1 * (self.hidden_channels1 + 1) +
-                                                               self.k2 * (self.hidden_channels2 + 1) +
-                                                               self.k3 * (self.hidden_channels2 + 1) +
-                                                               self.k4 * (self.hidden_channels2 + 1))),
+        self.preds = torch.nn.ModuleList([MLP(input_channels=(self.num_clusters1 + self.num_clusters2 + self.num_clusters3 + self.num_clusters4),
                                               hidden_channels=2 * hidden_channels2, output_channels=output_channels,
                                               num_layers=4, dropout=0.5)])
 
@@ -469,17 +466,17 @@ class SpectralNet(torch.nn.Module):
         embs = []
         for idx, subgraph in enumerate(pos):
             r = subgraph_to_cluster1[:, idx]
-            x = torch.cat([out, r.reshape(self.num_clusters1, 1)], dim=-1)
+            # x = torch.cat([out, r.reshape(self.num_clusters1, 1)], dim=-1)
             # x = out * r.reshape(self.num_clusters, 1)
             # pooled_features = x[x[:, -1].sort(descending=True)[1]]
             # # pooled_features = x
             # pooled_features = pooled_features.reshape(1, self.num_clusters1 * (self.hidden_channels1 + 1))  # [num_graphs, 1, k * hidden]
             # embs.append(pooled_features)
-            x = self.global_sort1(x)
-            x = x.reshape(self.k1 * (self.hidden_channels1 + 1), 1)
-            embs.append(x)
-        emb = torch.stack(embs, dim=0)
-        emb1 = emb.reshape(len(pos), self.k1 * (self.hidden_channels1 + 1))
+            # x = self.global_sort1(x)
+            # x = x.reshape(self.k1 * (self.hidden_channels1 + 1), 1)
+            embs.append(r)
+        emb1 = torch.stack(embs, dim=0)
+        # emb1 = emb.reshape(len(pos), self.k1 * (self.hidden_channels1 + 1))
 
         new_adj = out_adj.reshape(self.num_clusters1, self.num_clusters1)
         updated_edge_index = new_adj.nonzero().t().contiguous()
@@ -520,18 +517,18 @@ class SpectralNet(torch.nn.Module):
         embs = []
         for idx, subgraph in enumerate(pos):
             r = subgraph_to_cluster2[:, idx]
-            x = torch.cat([out, r.reshape(self.num_clusters2, 1)], dim=-1)
+            # x = torch.cat([out, r.reshape(self.num_clusters2, 1)], dim=-1)
             # x = out * r.reshape(self.num_clusters, 1)
             # pooled_features = x[x[:, -1].sort(descending=True)[1]]
             # # pooled_features = x
             # pooled_features = pooled_features.reshape(1, self.num_clusters2 * (
             #             self.hidden_channels2 + 1))  # [num_graphs, 1, k * hidden]
             # embs.append(pooled_features)
-            x = self.global_sort2(x)
-            x = x.reshape(self.k2 * (self.hidden_channels2 + 1))
-            embs.append(x)
-        emb = torch.stack(embs, dim=0)
-        emb2 = emb.reshape(len(pos), self.k2 * (self.hidden_channels2 + 1))
+            # x = self.global_sort2(x)
+            # x = x.reshape(self.k2 * (self.hidden_channels2 + 1))
+            embs.append(r)
+        emb2 = torch.stack(embs, dim=0)
+        # emb2 = emb.reshape(len(pos), self.k2 * (self.hidden_channels2 + 1))
 
         new_adj = out_adj.reshape(self.num_clusters2, self.num_clusters2)
         updated_edge_index = new_adj.nonzero().t().contiguous()
@@ -572,18 +569,18 @@ class SpectralNet(torch.nn.Module):
         embs = []
         for idx, subgraph in enumerate(pos):
             r = subgraph_to_cluster3[:, idx]
-            x = torch.cat([out, r.reshape(self.num_clusters3, 1)], dim=-1)
+            # x = torch.cat([out, r.reshape(self.num_clusters3, 1)], dim=-1)
             # x = out * r.reshape(self.num_clusters, 1)
             # pooled_features = x[x[:, -1].sort(descending=True)[1]]
             # # pooled_features = x
             # pooled_features = pooled_features.reshape(1, self.num_clusters2 * (
             #             self.hidden_channels2 + 1))  # [num_graphs, 1, k * hidden]
             # embs.append(pooled_features)
-            x = self.global_sort3(x)
-            x = x.reshape(self.k3 * (self.hidden_channels2 + 1))
-            embs.append(x)
-        emb = torch.stack(embs, dim=0)
-        emb3 = emb.reshape(len(pos), self.k3 * (self.hidden_channels2 + 1))
+            # x = self.global_sort3(x)
+            # x = x.reshape(self.k3 * (self.hidden_channels2 + 1))
+            embs.append(r)
+        emb3 = torch.stack(embs, dim=0)
+        # emb3 = emb.reshape(len(pos), self.k3 * (self.hidden_channels2 + 1))
 
         new_adj = out_adj.reshape(self.num_clusters3, self.num_clusters3)
         updated_edge_index = new_adj.nonzero().t().contiguous()
@@ -623,18 +620,18 @@ class SpectralNet(torch.nn.Module):
         embs = []
         for idx, subgraph in enumerate(pos):
             r = subgraph_to_cluster4[:, idx]
-            x = torch.cat([out, r.reshape(self.num_clusters4, 1)], dim=-1)
+            # x = torch.cat([out, r.reshape(self.num_clusters4, 1)], dim=-1)
             # x = out * r.reshape(self.num_clusters, 1)
             # pooled_features = x[x[:, -1].sort(descending=True)[1]]
             # # pooled_features = x
             # pooled_features = pooled_features.reshape(1, self.num_clusters2 * (
             #             self.hidden_channels2 + 1))  # [num_graphs, 1, k * hidden]
             # embs.append(pooled_features)
-            x = self.global_sort4(x)
-            x = x.reshape(self.k4 * (self.hidden_channels2 + 1))
-            embs.append(x)
-        emb = torch.stack(embs, dim=0)
-        emb4 = emb.reshape(len(pos), self.k4 * (self.hidden_channels2 + 1))
+            # x = self.global_sort4(x)
+            # x = x.reshape(self.k4 * (self.hidden_channels2 + 1))
+            embs.append(r)
+        emb4 = torch.stack(embs, dim=0)
+        # emb4 = emb.reshape(len(pos), self.k4 * (self.hidden_channels2 + 1))
 
         return self.preds[0](torch.cat([emb1, emb2, emb3, emb4],
                                        dim=-1)), mc_loss1 + mc_loss2 + mc_loss3 + mc_loss4, o_loss1 + o_loss2 + o_loss3 + o_loss3, subgraph_mc_loss1 + subgraph_mc_loss2 + subgraph_mc_loss3 + subgraph_mc_loss4, ent_loss1 + ent_loss2 + ent_loss3 + ent_loss4
