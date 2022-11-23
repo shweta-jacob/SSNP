@@ -439,7 +439,8 @@ class SpectralNet(torch.nn.Module):
         s = self.mlp1(x)
         ent_loss1 = (-torch.softmax(s, dim=-1) * torch.log(torch.softmax(s, dim=-1) + 1e-15)).sum(dim=-1).mean()
         l = torch.transpose(subgraph_assignment, 0, 1)
-        subgraph_to_cluster1 = torch.transpose(torch.softmax(s, dim=-1), 0, 1) @ l
+        subgraph_to_cluster1 = F.normalize(torch.transpose(torch.softmax(s, dim=-1), 0, 1), p=1,
+                                           dim=1) @ l
         adj = utils.to_dense_adj(edge_index, edge_attr=edge_weight)
         out, out_adj, mc_loss1, o_loss1 = dense_mincut_pool(x, adj, s)
         out = out.reshape(self.num_clusters1, self.hidden_channels1)
