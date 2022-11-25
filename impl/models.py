@@ -3,6 +3,7 @@ from math import ceil
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from sklearn.cluster import KMeans
 from torch.nn import Linear
 from torch_geometric import utils
 from torch_geometric.nn import GCNConv, dense_mincut_pool
@@ -377,9 +378,9 @@ class SpectralNet(torch.nn.Module):
                                       scale_grad_by_freq=False)
         self.emb_gn = GraphNorm(input_channels)
         self.num_clusters1 = ceil(0.25 * average_nodes)
-        self.num_clusters2 = ceil(0.5 * self.num_clusters1)
+        self.num_clusters2 = ceil(0.25 * self.num_clusters1)
         self.num_clusters3 = ceil(0.25 * self.num_clusters2)
-        self.num_clusters4 = ceil(0.5 * self.num_clusters3)
+        self.num_clusters4 = ceil(0.25 * self.num_clusters3)
         self.hidden_channels1 = hidden_channels1
         self.hidden_channels2 = hidden_channels2
         self.convs = nn.ModuleList()
@@ -399,16 +400,16 @@ class SpectralNet(torch.nn.Module):
         self.mlp3 = Linear(hidden_channels2, self.num_clusters3)
         self.mlp4 = Linear(hidden_channels2, self.num_clusters4)
         self.num_layers = num_layers
-        self.k1 = 100
-        self.k2 = 100
-        self.k3 = 50
-        self.k4 = 50
+        self.k1 = 20
+        self.k2 = 20
+        self.k3 = 10
+        self.k4 = 10
         self.global_sort1 = aggr.SortAggregation(k=self.k1)
         self.global_sort2 = aggr.SortAggregation(k=self.k2)
         self.global_sort3 = aggr.SortAggregation(k=self.k3)
         self.global_sort4 = aggr.SortAggregation(k=self.k4)
 
-        self.preds = torch.nn.ModuleList([MLP(input_channels=(self.k1 + self.k2 + self.k3 + self.k4),
+        self.preds = torch.nn.ModuleList([MLP(input_channels=(self.k1 * (hidden_channels1 + 1) + self.k2 * (hidden_channels2 + 1) + self.k3 * (hidden_channels2 + 1) + self.k4 * (hidden_channels2 + 1)),
                                               hidden_channels=2 * hidden_channels2, output_channels=output_channels,
                                               num_layers=4, dropout=0.5)])
 
@@ -436,14 +437,32 @@ class SpectralNet(torch.nn.Module):
         x = self.activation(x)
 
         # Cluster assignments (logits)
-        s = self.mlp1(x)
+        clusters = KMeans(n_clusters=self.num_clusters1, random_state=0).fit_predict(x.detach().numpy())
+        clusters = torch.Tensor(clusters)
+        s = torch.zeros(x.shape[0], self.num_clusters1)
+        for node, cluster in enumerate(clusters):
+            s[node][int(cluster)] = 1
+        # s = self.mlp1(x)
         ent_loss1 = (-torch.softmax(s, dim=-1) * torch.log(torch.softmax(s, dim=-1) + 1e-15)).sum(dim=-1).mean()
-        l = torch.transpose(subgraph_assignment, 0, 1)
-        subgraph_to_cluster1 = F.normalize(torch.transpose(torch.softmax(s, dim=-1), 0, 1), p=1,
-                                           dim=1) @ l
+        l = torch.transpose(F.normalize(subgraph_assignment, p=1,
+                                           dim=1), 0, 1)
+        subgraph_to_cluster1 = torch.transpose(s, 0, 1) @ l
         adj = utils.to_dense_adj(edge_index, edge_attr=edge_weight)
         out, out_adj, mc_loss1, o_loss1 = dense_mincut_pool(x, adj, s)
         out = out.reshape(self.num_clusters1, self.hidden_channels1)
+        # # Motif adj matrix - not sym. normalised
+        # motif_adj = torch.mul(torch.matmul(adj, adj), adj)
+        # motif_out_adj = torch.matmul(torch.matmul(torch.transpose(s, 0, 1), motif_adj), s)
+        #
+        # # Higher order cut
+        # diag_SAS = torch.einsum("ijj->ij", motif_out_adj)
+        # d_flat = torch.einsum("ijk->ij", motif_adj)
+        # d = _rank3_diag(d_flat)
+        # diag_SDS = (torch.einsum(
+        #     "ijk->ij", torch.matmul(torch.matmul(torch.transpose(s, 0, 1), d), s)) +
+        #             1e-15)
+        # ho_mincut_loss = -torch.sum(diag_SAS / diag_SDS, axis=1)
+        # ho_mincut_loss1 = 1 / self.num_clusters1 * torch.mean(ho_mincut_loss)
 
         subgraph_mc_loss1 = 0
         # for idx, subgraph_nodes in enumerate(pos):
@@ -467,16 +486,16 @@ class SpectralNet(torch.nn.Module):
         embs = []
         for idx, subgraph in enumerate(pos):
             r = subgraph_to_cluster1[:, idx]
-            r = r.sort(descending=True)[0]
-            # x = torch.cat([out, r.reshape(self.num_clusters1, 1)], dim=-1)
+            # r = r.sort(descending=True)[0]
+            x = torch.cat([out, r.reshape(self.num_clusters1, 1)], dim=-1)
             # x = out * r.reshape(self.num_clusters, 1)
             # pooled_features = x[x[:, -1].sort(descending=True)[1]]
             # # pooled_features = x
             # pooled_features = pooled_features.reshape(1, self.num_clusters1 * (self.hidden_channels1 + 1))  # [num_graphs, 1, k * hidden]
             # embs.append(pooled_features)
-            # x = self.global_sort1(x)
-            # x = x.reshape(self.k1 * (self.hidden_channels1 + 1), 1)
-            embs.append(r[:self.k1])
+            x = self.global_sort1(x)
+            x = x.reshape(self.k1 * (self.hidden_channels1 + 1))
+            embs.append(x)
         emb1 = torch.stack(embs, dim=0)
         # emb1 = emb.reshape(len(pos), self.k1 * (self.hidden_channels1 + 1))
 
@@ -488,14 +507,30 @@ class SpectralNet(torch.nn.Module):
         x = self.activation(x)
 
         # Cluster assignments (logits)
-        s = self.mlp2(x)
+        clusters = KMeans(n_clusters=self.num_clusters2, random_state=0).fit_predict(x.detach().numpy())
+        clusters = torch.Tensor(clusters)
+        s = torch.zeros(x.shape[0], self.num_clusters2)
+        for node, cluster in enumerate(clusters):
+            s[node][int(cluster)] = 1
+        # s = self.mlp2(x)
         ent_loss2 = (-torch.softmax(s, dim=-1) * torch.log(torch.softmax(s, dim=-1) + 1e-15)).sum(dim=-1).mean()
-        subgraph_to_cluster2 = F.normalize(torch.transpose(torch.softmax(s, dim=-1), 0, 1), p=1,
-                                           dim=1) @ subgraph_to_cluster1
+        subgraph_to_cluster2 = torch.transpose(s, 0, 1) @ subgraph_to_cluster1
         adj = utils.to_dense_adj(updated_edge_index, edge_attr=updated_edge_weight)
         out, out_adj, mc_loss2, o_loss2 = dense_mincut_pool(x, adj, s)
         out = out.reshape(self.num_clusters2, self.hidden_channels2)
-
+        # # Motif adj matrix - not sym. normalised
+        # motif_adj = torch.mul(torch.matmul(adj, adj), adj)
+        # motif_out_adj = torch.matmul(torch.matmul(torch.transpose(s, 0, 1), motif_adj), s)
+        #
+        # # Higher order cut
+        # diag_SAS = torch.einsum("ijj->ij", motif_out_adj)
+        # d_flat = torch.einsum("ijk->ij", motif_adj)
+        # d = _rank3_diag(d_flat)
+        # diag_SDS = (torch.einsum(
+        #     "ijk->ij", torch.matmul(torch.matmul(torch.transpose(s, 0, 1), d), s)) +
+        #             1e-15)
+        # ho_mincut_loss = -torch.sum(diag_SAS / diag_SDS, axis=1)
+        # ho_mincut_loss2 = 1 / self.num_clusters2 * torch.mean(ho_mincut_loss)
         subgraph_mc_loss2 = 0
         # for idx, subgraph_nodes in enumerate(pos):
         #     edge_index_s, edge_attr_s = utils.subgraph(subgraph_nodes, updated_edge_index, updated_edge_weight)
@@ -519,17 +554,17 @@ class SpectralNet(torch.nn.Module):
         embs = []
         for idx, subgraph in enumerate(pos):
             r = subgraph_to_cluster2[:, idx]
-            r = r.sort(descending=True)[0]
-            # x = torch.cat([out, r.reshape(self.num_clusters2, 1)], dim=-1)
+            # r = r.sort(descending=True)[0]
+            x = torch.cat([out, r.reshape(self.num_clusters2, 1)], dim=-1)
             # x = out * r.reshape(self.num_clusters, 1)
             # pooled_features = x[x[:, -1].sort(descending=True)[1]]
             # # pooled_features = x
             # pooled_features = pooled_features.reshape(1, self.num_clusters2 * (
             #             self.hidden_channels2 + 1))  # [num_graphs, 1, k * hidden]
             # embs.append(pooled_features)
-            # x = self.global_sort2(x)
-            # x = x.reshape(self.k2 * (self.hidden_channels2 + 1))
-            embs.append(r[:self.k2])
+            x = self.global_sort2(x)
+            x = x.reshape(self.k2 * (self.hidden_channels2 + 1))
+            embs.append(x)
         emb2 = torch.stack(embs, dim=0)
         # emb2 = emb.reshape(len(pos), self.k2 * (self.hidden_channels2 + 1))
 
@@ -541,14 +576,30 @@ class SpectralNet(torch.nn.Module):
         x = self.activation(x)
 
         # Cluster assignments (logits)
-        s = self.mlp3(x)
+        clusters = KMeans(n_clusters=self.num_clusters3, random_state=0).fit_predict(x.detach().numpy())
+        clusters = torch.Tensor(clusters)
+        s = torch.zeros(x.shape[0], self.num_clusters3)
+        for node, cluster in enumerate(clusters):
+            s[node][int(cluster)] = 1
+        # s = self.mlp3(x)
         ent_loss3 = (-torch.softmax(s, dim=-1) * torch.log(torch.softmax(s, dim=-1) + 1e-15)).sum(dim=-1).mean()
-        subgraph_to_cluster3 = F.normalize(torch.transpose(torch.softmax(s, dim=-1), 0, 1), p=1,
-                                           dim=1) @ subgraph_to_cluster2
+        subgraph_to_cluster3 = torch.transpose(s, 0, 1) @ subgraph_to_cluster2
         adj = utils.to_dense_adj(updated_edge_index, edge_attr=updated_edge_weight)
         out, out_adj, mc_loss3, o_loss3 = dense_mincut_pool(x, adj, s)
         out = out.reshape(self.num_clusters3, self.hidden_channels2)
-
+        # # Motif adj matrix - not sym. normalised
+        # motif_adj = torch.mul(torch.matmul(adj, adj), adj)
+        # motif_out_adj = torch.matmul(torch.matmul(torch.transpose(s, 0, 1), motif_adj), s)
+        #
+        # # Higher order cut
+        # diag_SAS = torch.einsum("ijj->ij", motif_out_adj)
+        # d_flat = torch.einsum("ijk->ij", motif_adj)
+        # d = _rank3_diag(d_flat)
+        # diag_SDS = (torch.einsum(
+        #     "ijk->ij", torch.matmul(torch.matmul(torch.transpose(s, 0, 1), d), s)) +
+        #             1e-15)
+        # ho_mincut_loss = -torch.sum(diag_SAS / diag_SDS, axis=1)
+        # ho_mincut_loss3 = 1 / self.num_clusters3 * torch.mean(ho_mincut_loss)
         subgraph_mc_loss3 = 0
         # for idx, subgraph_nodes in enumerate(pos):
         #     edge_index_s, edge_attr_s = utils.subgraph(subgraph_nodes, updated_edge_index, updated_edge_weight)
@@ -572,17 +623,17 @@ class SpectralNet(torch.nn.Module):
         embs = []
         for idx, subgraph in enumerate(pos):
             r = subgraph_to_cluster3[:, idx]
-            r = r.sort(descending=True)[0]
-            # x = torch.cat([out, r.reshape(self.num_clusters3, 1)], dim=-1)
+            # r = r.sort(descending=True)[0]
+            x = torch.cat([out, r.reshape(self.num_clusters3, 1)], dim=-1)
             # x = out * r.reshape(self.num_clusters, 1)
             # pooled_features = x[x[:, -1].sort(descending=True)[1]]
             # # pooled_features = x
             # pooled_features = pooled_features.reshape(1, self.num_clusters2 * (
             #             self.hidden_channels2 + 1))  # [num_graphs, 1, k * hidden]
             # embs.append(pooled_features)
-            # x = self.global_sort3(x)
-            # x = x.reshape(self.k3 * (self.hidden_channels2 + 1))
-            embs.append(r[:self.k3])
+            x = self.global_sort3(x)
+            x = x.reshape(self.k3 * (self.hidden_channels2 + 1))
+            embs.append(x)
         emb3 = torch.stack(embs, dim=0)
         # emb3 = emb.reshape(len(pos), self.k3 * (self.hidden_channels2 + 1))
 
@@ -593,14 +644,30 @@ class SpectralNet(torch.nn.Module):
         x = self.conv4(out, updated_edge_index, updated_edge_weight.detach())
 
         # Cluster assignments (logits)
-        s = self.mlp4(x)
+        clusters = KMeans(n_clusters=self.num_clusters4, random_state=0).fit_predict(x.detach().numpy())
+        clusters = torch.Tensor(clusters)
+        s = torch.zeros(x.shape[0], self.num_clusters4)
+        for node, cluster in enumerate(clusters):
+            s[node][int(cluster)] = 1
+        # s = self.mlp4(x)
         ent_loss4 = (-torch.softmax(s, dim=-1) * torch.log(torch.softmax(s, dim=-1) + 1e-15)).sum(dim=-1).mean()
-        subgraph_to_cluster4 = F.normalize(torch.transpose(torch.softmax(s, dim=-1), 0, 1), p=1,
-                                           dim=1) @ subgraph_to_cluster3
+        subgraph_to_cluster4 = torch.transpose(s, 0, 1) @ subgraph_to_cluster3
         adj = utils.to_dense_adj(updated_edge_index, edge_attr=updated_edge_weight)
         out, out_adj, mc_loss4, o_loss4 = dense_mincut_pool(x, adj, s)
         out = out.reshape(self.num_clusters4, self.hidden_channels2)
-
+        # # Motif adj matrix - not sym. normalised
+        # motif_adj = torch.mul(torch.matmul(adj, adj), adj)
+        # motif_out_adj = torch.matmul(torch.matmul(torch.transpose(s, 0, 1), motif_adj), s)
+        #
+        # # Higher order cut
+        # diag_SAS = torch.einsum("ijj->ij", motif_out_adj)
+        # d_flat = torch.einsum("ijk->ij", motif_adj)
+        # d = _rank3_diag(d_flat)
+        # diag_SDS = (torch.einsum(
+        #     "ijk->ij", torch.matmul(torch.matmul(torch.transpose(s, 0, 1), d), s)) +
+        #             1e-15)
+        # ho_mincut_loss = -torch.sum(diag_SAS / diag_SDS, axis=1)
+        # ho_mincut_loss4 = 1 / self.num_clusters4 * torch.mean(ho_mincut_loss)
         subgraph_mc_loss4 = 0
         # for idx, subgraph_nodes in enumerate(pos):
         #     edge_index_s, edge_attr_s = utils.subgraph(subgraph_nodes, updated_edge_index, updated_edge_weight)
@@ -624,22 +691,21 @@ class SpectralNet(torch.nn.Module):
         embs = []
         for idx, subgraph in enumerate(pos):
             r = subgraph_to_cluster4[:, idx]
-            r = r.sort(descending=True)[0]
-            # x = torch.cat([out, r.reshape(self.num_clusters4, 1)], dim=-1)
+            # r = r.sort(descending=True)[0]
+            x = torch.cat([out, r.reshape(self.num_clusters4, 1)], dim=-1)
             # x = out * r.reshape(self.num_clusters, 1)
             # pooled_features = x[x[:, -1].sort(descending=True)[1]]
             # # pooled_features = x
             # pooled_features = pooled_features.reshape(1, self.num_clusters2 * (
             #             self.hidden_channels2 + 1))  # [num_graphs, 1, k * hidden]
             # embs.append(pooled_features)
-            # x = self.global_sort4(x)
-            # x = x.reshape(self.k4 * (self.hidden_channels2 + 1))
-            embs.append(r[:self.k4])
+            x = self.global_sort4(x)
+            x = x.reshape(self.k4 * (self.hidden_channels2 + 1))
+            embs.append(x)
         emb4 = torch.stack(embs, dim=0)
         # emb4 = emb.reshape(len(pos), self.k4 * (self.hidden_channels2 + 1))
 
-        return self.preds[0](torch.cat([emb1, emb2, emb3, emb4],
-                                       dim=-1)), mc_loss1 + mc_loss2 + mc_loss3 + mc_loss4, o_loss1 + o_loss2 + o_loss3 + o_loss3, subgraph_mc_loss1 + subgraph_mc_loss2 + subgraph_mc_loss3 + subgraph_mc_loss4, ent_loss1 + ent_loss2 + ent_loss3 + ent_loss4
+        return self.preds[0](torch.cat([emb1, emb2, emb3, emb4], dim=-1))
 
 
 class MyGCNConv(torch.nn.Module):

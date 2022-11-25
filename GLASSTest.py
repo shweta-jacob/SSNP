@@ -294,11 +294,11 @@ def test(f,
         clustering_losses = []
         for i in range(10000):
             t1 = time.time()
-            loss, classification_loss, clustering_loss = train.train(optimizer, gnn, trn_dataset,
+            loss, classification_loss = train.train(optimizer, gnn, trn_dataset,
                                                                      train_subgraph_assignment, loss_fn,
                                                                      classification_losses, clustering_losses)
             classification_losses.append(classification_loss)
-            clustering_losses.append(clustering_loss)
+            # clustering_losses.append(clustering_loss)
             trn_time.append(time.time() - t1)
             if i % 10 == 0:
                 training_losses.append(loss.detach().numpy())
