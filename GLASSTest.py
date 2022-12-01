@@ -12,7 +12,7 @@ from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 from torch.optim import Adam, lr_scheduler
 
 import datasets
-from artificial import graph1, graph3, graph4, graph5, graph2, graph7
+from artificial import graph1, graph3, graph4, graph5, graph2, graph7, graph8, graph9
 from impl import models, SubGDataset, train, metrics, utils, config
 from impl.models import SpectralNet
 
@@ -52,8 +52,8 @@ if args.use_seed:
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.enabled = False
 
-# baseG = datasets.load_dataset(args.dataset)
-baseG = graph7.load_dataset()
+baseG = datasets.load_dataset(args.dataset)
+# baseG = graph9.load_dataset()
 
 # final_pos = []
 # finalY = []
@@ -163,23 +163,26 @@ def split():
     baseG.to(config.device)
     # split data
     trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
-    val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
-    tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
+    trn_dataset.pos = trn_dataset.pos[0:5]
+    val_dataset = trn_dataset
+    tst_dataset = trn_dataset
     train_subgraph_assignment = torch.zeros((trn_dataset.pos.shape[0], trn_dataset.x.shape[0])).to(config.device)
-    val_subgraph_assignment = torch.zeros((val_dataset.pos.shape[0], val_dataset.x.shape[0])).to(config.device)
-    test_subgraph_assignment = torch.zeros((tst_dataset.pos.shape[0], tst_dataset.x.shape[0])).to(config.device)
+    # val_subgraph_assignment = torch.zeros((val_dataset.pos.shape[0], val_dataset.x.shape[0])).to(config.device)
+    # test_subgraph_assignment = torch.zeros((tst_dataset.pos.shape[0], tst_dataset.x.shape[0])).to(config.device)
     for idx, pos in enumerate(trn_dataset.pos):
         for node in pos:
             if node != -1:
                 train_subgraph_assignment[idx][node] = 1
-    for idx, pos in enumerate(val_dataset.pos):
-        for node in pos:
-            if node != -1:
-                val_subgraph_assignment[idx][node] = 1
-    for idx, pos in enumerate(tst_dataset.pos):
-        for node in pos:
-            if node != -1:
-                test_subgraph_assignment[idx][node] = 1
+    # for idx, pos in enumerate(val_dataset.pos):
+    #     for node in pos:
+    #         if node != -1:
+    #             val_subgraph_assignment[idx][node] = 1
+    # for idx, pos in enumerate(tst_dataset.pos):
+    #     for node in pos:
+    #         if node != -1:
+    #             test_subgraph_assignment[idx][node] = 1
+    val_subgraph_assignment = train_subgraph_assignment
+    test_subgraph_assignment = train_subgraph_assignment
     # choice of dataloader
     if args.use_maxzeroone:
 
