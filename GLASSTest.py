@@ -163,26 +163,25 @@ def split():
     baseG.to(config.device)
     # split data
     trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
-    trn_dataset.pos = trn_dataset.pos[0:5]
-    val_dataset = trn_dataset
-    tst_dataset = trn_dataset
+    val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
+    tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
     train_subgraph_assignment = torch.zeros((trn_dataset.pos.shape[0], trn_dataset.x.shape[0])).to(config.device)
-    # val_subgraph_assignment = torch.zeros((val_dataset.pos.shape[0], val_dataset.x.shape[0])).to(config.device)
-    # test_subgraph_assignment = torch.zeros((tst_dataset.pos.shape[0], tst_dataset.x.shape[0])).to(config.device)
+    val_subgraph_assignment = torch.zeros((val_dataset.pos.shape[0], val_dataset.x.shape[0])).to(config.device)
+    test_subgraph_assignment = torch.zeros((tst_dataset.pos.shape[0], tst_dataset.x.shape[0])).to(config.device)
     for idx, pos in enumerate(trn_dataset.pos):
         for node in pos:
             if node != -1:
                 train_subgraph_assignment[idx][node] = 1
-    # for idx, pos in enumerate(val_dataset.pos):
-    #     for node in pos:
-    #         if node != -1:
-    #             val_subgraph_assignment[idx][node] = 1
-    # for idx, pos in enumerate(tst_dataset.pos):
-    #     for node in pos:
-    #         if node != -1:
-    #             test_subgraph_assignment[idx][node] = 1
-    val_subgraph_assignment = train_subgraph_assignment
-    test_subgraph_assignment = train_subgraph_assignment
+    for idx, pos in enumerate(val_dataset.pos):
+        for node in pos:
+            if node != -1:
+                val_subgraph_assignment[idx][node] = 1
+    for idx, pos in enumerate(tst_dataset.pos):
+        for node in pos:
+            if node != -1:
+                test_subgraph_assignment[idx][node] = 1
+    # val_subgraph_assignment = train_subgraph_assignment
+    # test_subgraph_assignment = train_subgraph_assignment
     # choice of dataloader
     if args.use_maxzeroone:
 
@@ -225,7 +224,7 @@ def buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_rat
     num_clusters2 = 200
     average_nodes = int(trn_dataset.x.size(0))
     print(f"Average number of nodes in graph: {average_nodes}")
-    print(f'Number of clusters in each layer: {num_clusters1}, {num_clusters2}', file=f)
+    # print(f'Number of clusters in each layer: {num_clusters1}, {num_clusters2}', file=f)
     gnn = SpectralNet(input_channels,
                       hidden_dim1,
                       hidden_dim2,
@@ -240,7 +239,7 @@ def buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_rat
 
     # if args.use_nodeid:
     #     print("load ", f"./Emb/{args.dataset}_64.pt")
-    #     emb = torch.load(f"./Emb/{args.dataset}_64.pt",
+    #     emb = torch.load(f"./Emb/opt_64.pt",
     #                      map_location=torch.device('cpu')).detach()
     #     gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
     #     gnn.input_emb.to(config.device)
@@ -283,25 +282,26 @@ def test(f,
         # trn_loader = loader_fn(trn_dataset, batch_size)
         # val_loader = tloader_fn(val_dataset, batch_size)
         # tst_loader = tloader_fn(tst_dataset, batch_size)
-        optimizer = Adam(gnn.parameters(), lr=lr)
+        optimizer = Adam(gnn.parameters(), lr=lr, weight_decay=1e-4)
         scd = lr_scheduler.ReduceLROnPlateau(optimizer,
                                              factor=resi,
                                              min_lr=5e-5)
         val_score = 0
         tst_score = 0
+        train_score = 0
         early_stop = 0
         trn_time = []
         training_losses = []
         epochs = []
-        classification_losses = []
-        clustering_losses = []
-        for i in range(10000):
+        prev_classification_loss = 0
+        prev_clustering_loss = 0
+        for i in range(20000):
             t1 = time.time()
-            loss, classification_loss, clustering_loss = train.train(optimizer, gnn, trn_dataset,
-                                                                     train_subgraph_assignment, loss_fn,
-                                                                     classification_losses, clustering_losses)
-            classification_losses.append(classification_loss)
-            clustering_losses.append(clustering_loss)
+            train_score, loss, classification_loss, clustering_loss = train.train(optimizer, gnn, trn_dataset,
+                                                                     train_subgraph_assignment, score_fn, loss_fn,
+                                                                     prev_classification_loss, prev_clustering_loss)
+            prev_classification_loss = classification_loss
+            prev_clustering_loss = clustering_loss
             trn_time.append(time.time() - t1)
             if i % 10 == 0:
                 training_losses.append(loss.detach().numpy())
@@ -325,7 +325,7 @@ def test(f,
                                           loss_fn=loss_fn)
                     tst_score = score
                     print(
-                        f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {tst_score:.4f}",
+                        f"iter {i} loss {loss:.4f} train {train_score:.4f} val {val_score:.4f} tst {tst_score:.4f}",
                         flush=True, file=f)
                 elif score >= val_score - 1e-5:
                     score, _ = train.test(f,gnn,
@@ -335,20 +335,20 @@ def test(f,
                                           loss_fn=loss_fn)
                     tst_score = max(score, tst_score)
                     print(
-                        f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {score:.4f}",
+                        f"iter {i} loss {loss:.4f} train {train_score:.4f} val {val_score:.4f} tst {score:.4f}",
                         flush=True, file=f)
                 else:
                     early_stop += 1
                     if i % 10 == 0:
                         print(
-                            f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(f, gnn, tst_dataset, test_subgraph_assignment, score_fn, loss_fn=loss_fn)[0]:.4f}",
+                            f"iter {i} loss {loss:.4f} train {train_score:.4f} val {score:.4f} tst {train.test(f, gnn, tst_dataset, test_subgraph_assignment, score_fn, loss_fn=loss_fn)[0]:.4f}",
                             flush=True, file=f)
             if val_score >= 1 - 1e-5:
                 early_stop += 1
             # if early_stop > 1000:
             #     break
         print(
-            f"end: epoch {i + 1}, train time {sum(trn_time):.2f} s, val {val_score:.3f}, tst {tst_score:.3f}",
+            f"end: epoch {i + 1}, train time {sum(trn_time):.2f} s, train {train_score:.4f} val {val_score:.3f}, tst {tst_score:.3f}",
             flush=True, file=f)
         outs.append(tst_score)
         figure(figsize=(8, 6))

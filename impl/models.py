@@ -376,12 +376,17 @@ class SpectralNet(torch.nn.Module):
                                       input_channels,
                                       scale_grad_by_freq=False)
         self.emb_gn = GraphNorm(input_channels)
-        self.num_clusters1 = 1250
-        self.num_clusters2 = 700
-        self.num_clusters3 = 400
-        self.num_clusters4 = 200
+        self.num_clusters1 = 500
+        self.num_clusters2 = 400
+        self.num_clusters3 = 200
+        self.num_clusters4 = 100
         self.hidden_channels1 = hidden_channels1
         self.hidden_channels2 = hidden_channels2
+        self.bns = torch.nn.ModuleList()
+        self.bns.append(torch.nn.BatchNorm1d(hidden_channels1))
+        self.bns.append(torch.nn.BatchNorm1d(hidden_channels2))
+        self.bns.append(torch.nn.BatchNorm1d(hidden_channels2))
+        self.bns.append(torch.nn.BatchNorm1d(hidden_channels2))
         self.convs = nn.ModuleList()
         self.jk = jk
         self.conv1 = GLASSConv(in_channels=input_channels, out_channels=hidden_channels1, activation=activation,
@@ -399,10 +404,10 @@ class SpectralNet(torch.nn.Module):
         self.mlp3 = Linear(hidden_channels2, self.num_clusters3)
         self.mlp4 = Linear(hidden_channels2, self.num_clusters4)
         self.num_layers = num_layers
-        self.k1 = 400
-        self.k2 = 200
-        self.k3 = 100
-        self.k4 = 50
+        self.k1 = 200
+        self.k2 = 100
+        self.k3 = 50
+        self.k4 = 20
         self.global_sort1 = aggr.SortAggregation(k=self.k1)
         self.global_sort2 = aggr.SortAggregation(k=self.k2)
         self.global_sort3 = aggr.SortAggregation(k=self.k3)
@@ -433,6 +438,7 @@ class SpectralNet(torch.nn.Module):
         # x = self.convs[-1](x, edge_index, edge_weight)
         # x = self.activation(x)
         x = self.conv1(x1, edge_index, edge_weight)
+        x = self.bns[0](x)
         x = self.activation(x)
 
         # Cluster assignments (logits)
@@ -498,6 +504,7 @@ class SpectralNet(torch.nn.Module):
         all_edge_weights = torch.flatten(new_adj)
         updated_edge_weight = all_edge_weights[torch.nonzero(all_edge_weights)].reshape(updated_edge_index[0].shape, )
         x = self.conv2(out, updated_edge_index, updated_edge_weight.detach())
+        x = self.bns[1](x)
         x = self.activation(x)
 
         # Cluster assignments (logits)
@@ -505,7 +512,7 @@ class SpectralNet(torch.nn.Module):
         ent_loss2 = (-torch.softmax(s, dim=-1) * torch.log(torch.softmax(s, dim=-1) + 1e-15)).sum(dim=-1).mean()
         subgraph_to_cluster2 = F.normalize(torch.transpose(torch.softmax(s, dim=-1), 0, 1), p=1,
                                            dim=1) @ subgraph_to_cluster1
-        adj = utils.to_dense_adj(updated_edge_index, edge_attr=updated_edge_weight)
+        adj = utils.to_dense_adj(updated_edge_index, edge_attr=updated_edge_weight, max_num_nodes=x.shape[0])
         out, out_adj, mc_loss2, o_loss2 = dense_mincut_pool(x, adj, s)
         out = out.reshape(self.num_clusters2, self.hidden_channels2)
         # # Motif adj matrix - not sym. normalised
@@ -563,6 +570,7 @@ class SpectralNet(torch.nn.Module):
         all_edge_weights = torch.flatten(new_adj)
         updated_edge_weight = all_edge_weights[torch.nonzero(all_edge_weights)].reshape(updated_edge_index[0].shape, )
         x = self.conv3(out, updated_edge_index, updated_edge_weight.detach())
+        x = self.bns[2](x)
         x = self.activation(x)
 
         # Cluster assignments (logits)
@@ -570,7 +578,7 @@ class SpectralNet(torch.nn.Module):
         ent_loss3 = (-torch.softmax(s, dim=-1) * torch.log(torch.softmax(s, dim=-1) + 1e-15)).sum(dim=-1).mean()
         subgraph_to_cluster3 = F.normalize(torch.transpose(torch.softmax(s, dim=-1), 0, 1), p=1,
                                            dim=1) @ subgraph_to_cluster2
-        adj = utils.to_dense_adj(updated_edge_index, edge_attr=updated_edge_weight)
+        adj = utils.to_dense_adj(updated_edge_index, edge_attr=updated_edge_weight, max_num_nodes=x.shape[0])
         out, out_adj, mc_loss3, o_loss3 = dense_mincut_pool(x, adj, s)
         out = out.reshape(self.num_clusters3, self.hidden_channels2)
         # # Motif adj matrix - not sym. normalised
