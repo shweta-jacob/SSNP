@@ -370,12 +370,12 @@ class Ensemble(torch.nn.Module):
                  hidden_channels2,
                  output_channels,):
         super().__init__()
-        self.input_emb = plain_gnn.input_emb
+        self.input_emb = None
         self.plain_gnn = plain_gnn
         self.spectral_gnn = spectral_gnn
         self.hidden_channels2 = hidden_channels2
         self.k = 20
-        self.preds = torch.nn.ModuleList([MLP(input_channels=(self.hidden_channels2 * 1 + self.k),
+        self.preds = torch.nn.ModuleList([MLP(input_channels=(self.hidden_channels2 * 2 + self.k),
                                               hidden_channels=hidden_channels2, output_channels=output_channels,
                                               num_layers=4, dropout=0.5)])
     def Pool(self, emb, subG_node, pool):
@@ -386,8 +386,7 @@ class Ensemble(torch.nn.Module):
 
     def forward(self, x, x2, edge_index, edge_weight, pos, subgraph_assignment):
         # subgraph_emb = self.plain_gnn(x, edge_index, edge_weight, pos)
-        input_emb = self.input_emb(x).reshape(x.shape[0], -1)
-        subgraph_emb = self.Pool(input_emb, pos, self.plain_gnn.pools[0])
+        subgraph_emb = self.Pool(self.input_emb, pos, self.plain_gnn.pools[0])
         cont_labels, mc_loss, o_loss, sub_loss, ent_loss = self.spectral_gnn(x, edge_index, edge_weight, pos,
                                                                              subgraph_assignment)
         return self.preds[0](torch.cat([subgraph_emb, cont_labels],

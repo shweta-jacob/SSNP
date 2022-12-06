@@ -273,9 +273,12 @@ def buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_rat
                          map_location=torch.device('cpu')).detach()
         gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
         plain_gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
-        # gnn.input_emb.to(config.device)
+        gnn.input_emb.to(config.device)
+        plain_gnn.input_emb.to(config.device)
+    emb = torch.load(f"ppi_bp_emb.pt",
+                     map_location=torch.device('cpu')).detach()
     ensemble = models.Ensemble(plain_gnn, gnn, hidden_dim2, output_channels,)
-    ensemble.input_emb = plain_gnn.input_emb
+    ensemble.input_emb = emb
     return ensemble
 
 
