@@ -25,6 +25,7 @@ class BaseGraph(Data):
                                         pos=subG_node,
                                         y=subG_label)
         self.mask = mask
+        self.x2 = x
         self.to_undirected()
 
     def setDegreeFeature(self, mod=1):
@@ -47,7 +48,7 @@ class BaseGraph(Data):
 
     def get_split(self, split: str):
         tar_mask = {"train": 0, "valid": 1, "test": 2}[split]
-        return self.x, self.edge_index, self.edge_attr, self.pos[
+        return self.x, self.x2, self.edge_index, self.edge_attr, self.pos[
             self.mask == tar_mask], self.y[self.mask == tar_mask]
 
     def to_undirected(self):

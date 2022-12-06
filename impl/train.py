@@ -10,7 +10,7 @@ def train(optimizer, model, dataset, subgraph_assignment, metrics, loss_fn, prev
     model.train()
     optimizer.zero_grad()
     beta = 0.1
-    pred, mc_loss, o_loss, subgraph_mc_loss, ent_loss = model(dataset.x, dataset.edge_index, dataset.edge_attr, dataset.pos, subgraph_assignment)
+    pred, mc_loss, o_loss, subgraph_mc_loss, ent_loss = model(dataset.x, dataset.x2, dataset.edge_index, dataset.edge_attr, dataset.pos, subgraph_assignment)
     classification_loss = loss_fn(pred, dataset.y)
     clustering_loss = mc_loss + o_loss + subgraph_mc_loss + ent_loss
     final_loss = [1, 1]
@@ -37,7 +37,7 @@ def test(f, model, dataset, subgraph_assignment, metrics, loss_fn):
     model.eval()
     preds = []
     ys = []
-    pred, mc_loss, o_loss, subgraph_mc_loss, ent_loss = model(dataset.x, dataset.edge_index, dataset.edge_attr, dataset.pos, subgraph_assignment)
+    pred, mc_loss, o_loss, subgraph_mc_loss, ent_loss = model(dataset.x, dataset.x2, dataset.edge_index, dataset.edge_attr, dataset.pos, subgraph_assignment)
     preds.append(pred)
     ys.append(dataset.y)
     pred = torch.cat(preds, dim=0)

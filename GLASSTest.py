@@ -55,6 +55,9 @@ if args.use_seed:
     torch.backends.cudnn.enabled = False
 
 baseG = datasets.load_dataset(args.dataset)
+# subgraphs = create_subgraphs(baseG)
+# pretrained_embeddings = NestedGCN(subgraphs, 2, 32)
+# baseG.x = pretrained_embeddings
 # baseG = graph9.load_dataset()
 
 # final_pos = []
@@ -156,6 +159,7 @@ def split():
         baseG.setDegreeFeature()
     elif args.use_one:
         baseG.setOneFeature()
+        # baseG.setNodeIdFeature()
     elif args.use_nodeid:
         baseG.setNodeIdFeature()
     else:
@@ -269,8 +273,9 @@ def buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_rat
                          map_location=torch.device('cpu')).detach()
         gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
         plain_gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
-        gnn.input_emb.to(config.device)
+        # gnn.input_emb.to(config.device)
     ensemble = models.Ensemble(plain_gnn, gnn, hidden_dim2, output_channels,)
+    ensemble.input_emb = plain_gnn.input_emb
     return ensemble
 
 
