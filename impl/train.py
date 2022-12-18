@@ -18,14 +18,14 @@ def train(optimizer, model, dataset, subgraph_assignment, metrics, loss_fn, prev
     beta = 0.1
     pred, mc_loss, o_loss, subgraph_mc_loss, ent_loss = model(dataset.x, dataset.edge_index, dataset.edge_attr, dataset.pos, subgraph_assignment)
     classification_loss = loss_fn(pred, dataset.y)
-    clustering_loss = mc_loss + o_loss + subgraph_mc_loss + 0
+    clustering_loss = mc_loss + o_loss + subgraph_mc_loss + ent_loss
     final_loss = [1, 1]
     if prev_classification_loss != 0:
         alpha1 = beta * (classification_loss - prev_classification_loss)
         alpha2 = beta * (clustering_loss - prev_clustering_loss)
         all_losses = torch.Tensor([alpha1, alpha2])
         final_loss = torch.softmax(all_losses, dim=-1)
-    loss = 1 * classification_loss + 1 * clustering_loss
+    loss = final_loss[0] * classification_loss + final_loss[1] * clustering_loss
     loss.backward()
     optimizer.step()
     preds.append(pred)

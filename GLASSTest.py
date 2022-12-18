@@ -56,68 +56,6 @@ if args.use_seed:
     torch.backends.cudnn.enabled = False
 
 baseG = datasets.load_dataset(args.dataset)
-# subgraphs = create_subgraphs(baseG)
-# pretrained_embeddings = NestedGCN(subgraphs, 2, 32)
-# baseG.x = pretrained_embeddings
-# baseG = graph9.load_dataset()
-
-# final_pos = []
-# finalY = []
-# final_mask = []
-# j = 0
-# i = 0
-# for idx, pos in enumerate(baseG.pos[0:1121]):
-#     if baseG.y[idx] == 0:
-#         final_pos.append(pos)
-#         finalY.append(baseG.y[idx])
-#         final_mask.append(baseG.mask[idx])
-#         i += 1
-#     if baseG.y[idx] == 1:
-#         final_pos.append(pos)
-#         finalY.append(baseG.y[idx])
-#         final_mask.append(baseG.mask[idx])
-#         j += 1
-#     if i >= 2 and j >= 2:
-#         break
-# j = 0
-# i = 0
-# val_pos = baseG.pos[1272:1431]
-# val_mask = baseG.mask[1272:1431]
-# val_y = baseG.y[1272:1431]
-# for idx, pos in enumerate(val_pos):
-#     if val_y[idx] == 0:
-#         final_pos.append(pos)
-#         finalY.append(val_y[idx])
-#         final_mask.append(val_mask[idx])
-#         i += 1
-#     if val_y[idx] == 1:
-#         final_pos.append(pos)
-#         finalY.append(val_y[idx])
-#         final_mask.append(val_mask[idx])
-#         j += 1
-#     if i >= 2 and j >= 2:
-#         break
-# j = 0
-# i = 0
-# test_pos = baseG.pos[1432:]
-# test_mask = baseG.mask[1432:]
-# test_y = baseG.y[1432:]
-# for idx, pos in enumerate(test_pos):
-#     if test_y[idx] == 0:
-#         final_pos.append(pos)
-#         finalY.append(test_y[idx])
-#         final_mask.append(test_mask[idx])
-#         i += 1
-#     if test_y[idx] == 1:
-#         final_pos.append(pos)
-#         finalY.append(test_y[idx])
-#         final_mask.append(test_mask[idx])
-#         j += 1
-#     if i >= 2 and j >= 2:
-#         break
-# baseG.pos = torch.stack(final_pos)
-# baseG.y = torch.Tensor(finalY)
-# baseG.mask = torch.Tensor(final_mask)
 
 trn_dataset, val_dataset, tst_dataset = None, None, None
 train_subgraph_assignment, val_subgraph_assignment, test_subgraph_assignment = None, None, None
@@ -175,67 +113,73 @@ def split():
     baseG.to(config.device)
     # split data
     trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
-    # b = trn_dataset.y <= 1
-    # indices = b.nonzero()
-    # reshaped_indices = indices.reshape(len(indices), )
-    # trn_dataset.y = trn_dataset.y[reshaped_indices]
-    # trn_dataset.pos = trn_dataset.pos[reshaped_indices]
-    # new_pos = trn_dataset.pos.clone()
-    # for idx, sample in enumerate(trn_dataset.pos):
-    #     updated_samples = sample
-    #     updated_samples[0] = -1
-    #     new_pos[idx] = updated_samples
-    # trn_dataset.pos = torch.cat((trn_dataset.pos, new_pos), dim=0)
-    # trn_dataset.y = torch.cat((trn_dataset.y, trn_dataset.y), dim=0)
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
-    # b = val_dataset.y <= 1
-    # indices = b.nonzero()
-    # reshaped_indices = indices.reshape(len(indices), )
-    # val_dataset.y = val_dataset.y[reshaped_indices]
-    # val_dataset.pos = val_dataset.pos[reshaped_indices]
     tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
-    # b = tst_dataset.y <= 1
-    # indices = b.nonzero()
-    # reshaped_indices = indices.reshape(len(indices), )
-    # tst_dataset.y = tst_dataset.y[reshaped_indices]
-    # tst_dataset.pos = tst_dataset.pos[reshaped_indices]
-    import networkx as nx
-    from matplotlib import pylab as pl
-    for idx, subgraph in enumerate(trn_dataset.pos):
-
-        G = to_networkx(baseG, to_undirected=True)
-        print(trn_dataset.y[idx])
-        k = G.subgraph(subgraph.tolist())
-        print(nx.density(k))
-        pos = nx.circular_layout(G)  # setting the positions with respect to G, not k.
-        pl.figure()
-        nx.draw_networkx(k, pos=pos)
-
-        pl.show()
-
-    for idx, subgraph in enumerate(val_dataset.pos):
-
-        G = to_networkx(baseG, to_undirected=True)
-        print(val_dataset.y[idx])
-        k = G.subgraph(subgraph.tolist())
-        print(nx.density(k))
-        pos = nx.circular_layout(G)  # setting the positions with respect to G, not k.
-        pl.figure()
-        nx.draw_networkx(k, pos=pos)
-
-        pl.show()
-
-    for idx, subgraph in enumerate(tst_dataset.pos):
-
-        G = to_networkx(baseG, to_undirected=True)
-        print(tst_dataset.y[idx])
-        k = G.subgraph(subgraph.tolist())
-        print(nx.density(k))
-        pos = nx.circular_layout(G)  # setting the positions with respect to G, not k.
-        pl.figure()
-        nx.draw_networkx(k, pos=pos)
-
-        pl.show()
+    # import networkx as nx
+    # from matplotlib import pylab as pl
+    #
+    # class0 = []
+    # class1 = []
+    # class2 = []
+    # for idx, subgraph in enumerate(trn_dataset.pos):
+    #     G = to_networkx(baseG, to_undirected=True)
+    #     # print(trn_dataset.y[idx])
+    #     k = G.subgraph(subgraph.tolist())
+    #     density = nx.density(k)
+    #     if trn_dataset.y[idx] == 0:
+    #         class0.append(density)
+    #     elif trn_dataset.y[idx] == 1:
+    #         class1.append(density)
+    #     elif trn_dataset.y[idx] == 2:
+    #         class2.append(density)
+    #     # print(density)
+    #     # pos = nx.circular_layout(G)  # setting the positions with respect to G, not k.
+    #     # pl.figure()
+    #     # nx.draw_networkx(k, pos=pos)
+    #     #
+    #     # pl.show()
+    #
+    # class0 = []
+    # class1 = []
+    # class2 = []
+    # for idx, subgraph in enumerate(val_dataset.pos):
+    #     G = to_networkx(baseG, to_undirected=True)
+    #     print(val_dataset.y[idx])
+    #     k = G.subgraph(subgraph.tolist())
+    #     density = nx.density(k)
+    #     if val_dataset.y[idx] == 0:
+    #         class0.append(density)
+    #     elif val_dataset.y[idx] == 1:
+    #         class1.append(density)
+    #     elif val_dataset.y[idx] == 2:
+    #         class2.append(density)
+    #     print(density)
+    #     # pos = nx.circular_layout(G)  # setting the positions with respect to G, not k.
+    #     # pl.figure()
+    #     # nx.draw_networkx(k, pos=pos)
+    #     #
+    #     # pl.show()
+    #
+    # class0 = []
+    # class1 = []
+    # class2 = []
+    # for idx, subgraph in enumerate(tst_dataset.pos):
+    #     G = to_networkx(baseG, to_undirected=True)
+    #     print(tst_dataset.y[idx])
+    #     k = G.subgraph(subgraph.tolist())
+    #     density = nx.density(k)
+    #     if tst_dataset.y[idx] == 0:
+    #         class0.append(density)
+    #     elif tst_dataset.y[idx] == 1:
+    #         class1.append(density)
+    #     elif tst_dataset.y[idx] == 2:
+    #         class2.append(density)
+    #     print(density)
+    #     # pos = nx.circular_layout(G)  # setting the positions with respect to G, not k.
+    #     # pl.figure()
+    #     # nx.draw_networkx(k, pos=pos)
+    #     #
+    #     # pl.show()
     train_subgraph_assignment = torch.zeros((trn_dataset.pos.shape[0], trn_dataset.x.shape[0])).to(config.device)
     val_subgraph_assignment = torch.zeros((val_dataset.pos.shape[0], val_dataset.x.shape[0])).to(config.device)
     test_subgraph_assignment = torch.zeros((tst_dataset.pos.shape[0], tst_dataset.x.shape[0])).to(config.device)
@@ -251,8 +195,6 @@ def split():
         for node in pos:
             if node != -1:
                 test_subgraph_assignment[idx][node] = 1
-    # val_subgraph_assignment = train_subgraph_assignment
-    # test_subgraph_assignment = train_subgraph_assignment
     # choice of dataloader
     if args.use_maxzeroone:
 
@@ -379,7 +321,7 @@ def test(f,
 
     outs = []
     for repeat in range(args.repeat):
-        set_seed((1 << repeat) - 1, f)
+        set_seed(1, f)
         print(f"repeat {repeat}", file=f)
         split()
         gnn = buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_ratio,
@@ -400,7 +342,7 @@ def test(f,
         epochs = []
         prev_classification_loss = 0
         prev_clustering_loss = 0
-        for i in range(5000):
+        for i in range(20000):
             t1 = time.time()
             train_score, loss, classification_loss, clustering_loss = train.train(optimizer, gnn, trn_dataset,
                                                                      train_subgraph_assignment, score_fn, loss_fn,

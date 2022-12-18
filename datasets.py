@@ -159,7 +159,7 @@ def load_dataset(name: str):
              2 * torch.ones(cnt // 2 - cnt // 4, dtype=torch.int64)))
         mask = mask[torch.randperm(mask.shape[0])]
         return BaseGraph(torch.empty(
-            (4999, 1, 0)), torch.from_numpy(edge),
+            (len(node), 1, 0)), torch.from_numpy(edge),
                          torch.ones(edge.shape[1]), subG_pad, subGLabel, mask)
     elif name in ["ppi_bp", "hpo_metab", "hpo_neuro", "em_user"]:
         multilabel = False
