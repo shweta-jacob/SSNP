@@ -25,7 +25,6 @@ class BaseGraph(Data):
                                         pos=subG_node,
                                         y=subG_label)
         self.mask = mask
-        self.x2 = x
         self.to_undirected()
 
     def setDegreeFeature(self, mod=1):
@@ -48,7 +47,7 @@ class BaseGraph(Data):
 
     def get_split(self, split: str):
         tar_mask = {"train": 0, "valid": 1, "test": 2}[split]
-        return self.x, self.x2, self.edge_index, self.edge_attr, self.pos[
+        return self.x, self.edge_index, self.edge_attr, self.pos[
             self.mask == tar_mask], self.y[self.mask == tar_mask]
 
     def to_undirected(self):
@@ -89,18 +88,70 @@ class BaseGraph(Data):
 def load_dataset(name: str):
     # To use your own dataset, add a branch returning a BaseGraph Object here.
     if name in ["coreness", "cut_ratio", "density", "component"]:
+        def read_subgraphs(sub_f, split=True):
+            label_idx = 0
+            labels = {}
+            train_sub_G, val_sub_G, test_sub_G = [], [], []
+            train_sub_G_label, val_sub_G_label, test_sub_G_label = [], [], []
+            train_mask, val_mask, test_mask = [], [], []
+            nonlocal multilabel
+            # Parse data
+            with open(sub_f) as fin:
+                subgraph_idx = 0
+                for line in fin:
+                    nodes = [
+                        int(n) for n in line.split("\t")[0].split("-")
+                        if n != ""
+                    ]
+                    if len(nodes) != 0:
+                        if len(nodes) == 1:
+                            print(nodes)
+                        l = line.split("\t")[1].split("-")
+                        if len(l) > 1:
+                            multilabel = True
+                        for lab in l:
+                            if lab not in labels.keys():
+                                labels[lab] = label_idx
+                                label_idx += 1
+                        if line.split("\t")[2].strip() == "train":
+                            train_sub_G.append(nodes)
+                            train_sub_G_label.append(
+                                [labels[lab] for lab in l])
+                            train_mask.append(subgraph_idx)
+                        elif line.split("\t")[2].strip() == "val":
+                            val_sub_G.append(nodes)
+                            val_sub_G_label.append([labels[lab] for lab in l])
+                            val_mask.append(subgraph_idx)
+                        elif line.split("\t")[2].strip() == "test":
+                            test_sub_G.append(nodes)
+                            test_sub_G_label.append([labels[lab] for lab in l])
+                            test_mask.append(subgraph_idx)
+                        subgraph_idx += 1
+            if True:
+                train_sub_G_label = torch.tensor(train_sub_G_label).squeeze()
+                val_sub_G_label = torch.tensor(val_sub_G_label).squeeze()
+                test_sub_G_label = torch.tensor(test_sub_G_label).squeeze()
+
+            if len(val_mask) < len(test_mask):
+                return train_sub_G, train_sub_G_label, test_sub_G, test_sub_G_label, val_sub_G, val_sub_G_label
+
+            return train_sub_G, train_sub_G_label, val_sub_G, val_sub_G_label, test_sub_G, test_sub_G_label
+        train_sub_G, train_sub_G_label, val_sub_G, val_sub_G_label, test_sub_G, test_sub_G_label = read_subgraphs(
+            f"subgraphs.pth")
         obj = np.load(f"./dataset_/{name}/tmp.npy", allow_pickle=True).item()
         # copied from https://github.com/mims-harvard/SubGNN/blob/main/SubGNN/subgraph_utils.py
         edge = np.array([[i[0] for i in obj['G'].edges],
                          [i[1] for i in obj['G'].edges]])
-        degree = obj['G'].degree
+        # subG = train_sub_G + val_sub_G + test_sub_G
+        # subGLabel = torch.cat([train_sub_G_label, val_sub_G_label, test_sub_G_label], dim=0)
+        # degree = obj['G'].degree
         node = [n for n in obj['G'].nodes]
         subG = obj["subG"]
         subG_pad = pad_sequence([torch.tensor(i) for i in subG],
                                 batch_first=True,
                                 padding_value=-1)
         subGLabel = torch.tensor([ord(i) - ord('A') for i in obj["subGLabel"]])
-        #mask = torch.tensor(obj['mask'])
+        # mask = torch.tensor(obj['mask'])
         cnt = subG_pad.shape[0]
         mask = torch.cat(
             (torch.zeros(cnt - cnt // 2, dtype=torch.int64),
@@ -108,7 +159,7 @@ def load_dataset(name: str):
              2 * torch.ones(cnt // 2 - cnt // 4, dtype=torch.int64)))
         mask = mask[torch.randperm(mask.shape[0])]
         return BaseGraph(torch.empty(
-            (len(node), 1, 0)), torch.from_numpy(edge),
+            (4999, 1, 0)), torch.from_numpy(edge),
                          torch.ones(edge.shape[1]), subG_pad, subGLabel, mask)
     elif name in ["ppi_bp", "hpo_metab", "hpo_neuro", "em_user"]:
         multilabel = False

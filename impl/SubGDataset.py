@@ -12,9 +12,8 @@ class GDataset:
             For example, [[0, 1, 2], [6, 7, -1]] means two subgraphs containing nodes 0, 1, 2 and 6, 7 respectively.
         y : the target of subgraphs.
     '''
-    def __init__(self, x, x2, edge_index, edge_attr, pos, y):
+    def __init__(self, x, edge_index, edge_attr, pos, y):
         self.x=x
-        self.x2=x
         self.edge_index=edge_index
         self.edge_attr=edge_attr
         self.y=y
@@ -29,7 +28,6 @@ class GDataset:
 
     def to(self, device):
         self.x = self.x.to(device)
-        self.x2 = self.x2.to(device)
         self.edge_index = self.edge_index.to(device)
         self.edge_attr = self.edge_attr.to(device)
         self.pos = self.pos.to(device)

@@ -11,6 +11,7 @@ from matplotlib import pyplot as plt
 from matplotlib.pyplot import figure
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 from torch.optim import Adam, lr_scheduler
+from torch_geometric.utils import to_networkx
 
 import datasets
 from artificial import graph1, graph3, graph4, graph5, graph2, graph7, graph8, graph9
@@ -151,9 +152,14 @@ def split():
     load and split dataset.
     '''
     # initialize and split dataset
-    global trn_dataset, val_dataset, tst_dataset
+    global trn_dataset, val_dataset, tst_dataset, baseG
     global train_subgraph_assignment, val_subgraph_assignment, test_subgraph_assignment
     global max_deg, output_channels, loader_fn, tloader_fn
+    baseG = datasets.load_dataset(args.dataset)
+    if baseG.y.unique().shape[0] == 2:
+        baseG.y = baseG.y.to(torch.float)
+    else:
+        baseG.y = baseG.y.to(torch.int64)
     # initialize node features
     if args.use_deg:
         baseG.setDegreeFeature()
@@ -169,8 +175,67 @@ def split():
     baseG.to(config.device)
     # split data
     trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
+    # b = trn_dataset.y <= 1
+    # indices = b.nonzero()
+    # reshaped_indices = indices.reshape(len(indices), )
+    # trn_dataset.y = trn_dataset.y[reshaped_indices]
+    # trn_dataset.pos = trn_dataset.pos[reshaped_indices]
+    # new_pos = trn_dataset.pos.clone()
+    # for idx, sample in enumerate(trn_dataset.pos):
+    #     updated_samples = sample
+    #     updated_samples[0] = -1
+    #     new_pos[idx] = updated_samples
+    # trn_dataset.pos = torch.cat((trn_dataset.pos, new_pos), dim=0)
+    # trn_dataset.y = torch.cat((trn_dataset.y, trn_dataset.y), dim=0)
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
+    # b = val_dataset.y <= 1
+    # indices = b.nonzero()
+    # reshaped_indices = indices.reshape(len(indices), )
+    # val_dataset.y = val_dataset.y[reshaped_indices]
+    # val_dataset.pos = val_dataset.pos[reshaped_indices]
     tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
+    # b = tst_dataset.y <= 1
+    # indices = b.nonzero()
+    # reshaped_indices = indices.reshape(len(indices), )
+    # tst_dataset.y = tst_dataset.y[reshaped_indices]
+    # tst_dataset.pos = tst_dataset.pos[reshaped_indices]
+    import networkx as nx
+    from matplotlib import pylab as pl
+    for idx, subgraph in enumerate(trn_dataset.pos):
+
+        G = to_networkx(baseG, to_undirected=True)
+        print(trn_dataset.y[idx])
+        k = G.subgraph(subgraph.tolist())
+        print(nx.density(k))
+        pos = nx.circular_layout(G)  # setting the positions with respect to G, not k.
+        pl.figure()
+        nx.draw_networkx(k, pos=pos)
+
+        pl.show()
+
+    for idx, subgraph in enumerate(val_dataset.pos):
+
+        G = to_networkx(baseG, to_undirected=True)
+        print(val_dataset.y[idx])
+        k = G.subgraph(subgraph.tolist())
+        print(nx.density(k))
+        pos = nx.circular_layout(G)  # setting the positions with respect to G, not k.
+        pl.figure()
+        nx.draw_networkx(k, pos=pos)
+
+        pl.show()
+
+    for idx, subgraph in enumerate(tst_dataset.pos):
+
+        G = to_networkx(baseG, to_undirected=True)
+        print(tst_dataset.y[idx])
+        k = G.subgraph(subgraph.tolist())
+        print(nx.density(k))
+        pos = nx.circular_layout(G)  # setting the positions with respect to G, not k.
+        pl.figure()
+        nx.draw_networkx(k, pos=pos)
+
+        pl.show()
     train_subgraph_assignment = torch.zeros((trn_dataset.pos.shape[0], trn_dataset.x.shape[0])).to(config.device)
     val_subgraph_assignment = torch.zeros((val_dataset.pos.shape[0], val_dataset.x.shape[0])).to(config.device)
     test_subgraph_assignment = torch.zeros((tst_dataset.pos.shape[0], tst_dataset.x.shape[0])).to(config.device)
@@ -223,8 +288,8 @@ def buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_rat
         aggr: aggregation method. mean, sum, or gcn. 
     '''
     input_channels = hidden_dim1
-    if args.use_nodeid:
-        input_channels = 64
+    # if args.use_nodeid:
+    #     input_channels = 64
 
     num_clusters1 = 500
     num_clusters2 = 200
@@ -267,18 +332,21 @@ def buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_rat
         raise NotImplementedError
     plain_gnn = GLASS(conv,
                        torch.nn.ModuleList([pool_fn1])).to(config.device)
-    if args.use_nodeid:
-        print("load ", f"./Emb/{args.dataset}_64.pt")
-        emb = torch.load(f"./Emb/{args.dataset}_64.pt",
-                         map_location=torch.device('cpu')).detach()
-        gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
-        plain_gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
-        gnn.input_emb.to(config.device)
-        plain_gnn.input_emb.to(config.device)
-    emb = torch.load(f"ppi_bp_emb.pt",
-                     map_location=torch.device('cpu')).detach()
-    ensemble = models.Ensemble(plain_gnn, gnn, hidden_dim2, output_channels,)
-    ensemble.input_emb = emb
+    # if args.use_nodeid:
+    #     print("load ", f"./Emb/{args.dataset}_64.pt")
+    #     emb = torch.load(f"./Emb/{args.dataset}_64.pt",
+    #                      map_location=torch.device('cpu')).detach()
+    #
+    #     # plain_gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
+    #     gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
+    #     gnn.input_emb.to(config.device)
+        # plain_gnn.input_emb.to(config.device)
+    # emb = torch.load(f"./subgraph_emb/cut_ratio_emb.pt",
+    #                  map_location=torch.device('cpu')).detach()
+    # gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
+    # gnn.input_emb.to(config.device)
+    ensemble = models.Ensemble(plain_gnn, gnn, hidden_dim2, output_channels)
+    # ensemble.input_emb = emb
     return ensemble
 
 
@@ -313,6 +381,7 @@ def test(f,
     for repeat in range(args.repeat):
         set_seed((1 << repeat) - 1, f)
         print(f"repeat {repeat}", file=f)
+        split()
         gnn = buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_ratio,
                          aggr)
         # trn_loader = loader_fn(trn_dataset, batch_size)
@@ -331,7 +400,7 @@ def test(f,
         epochs = []
         prev_classification_loss = 0
         prev_clustering_loss = 0
-        for i in range(20000):
+        for i in range(5000):
             t1 = time.time()
             train_score, loss, classification_loss, clustering_loss = train.train(optimizer, gnn, trn_dataset,
                                                                      train_subgraph_assignment, score_fn, loss_fn,
@@ -398,7 +467,7 @@ def test(f,
     )
 
 
-with open('output1.log', 'w') as out_file:
+with open('output.log', 'w') as out_file:
     print(args, file=out_file)
     # read configuration
     with open(f"config/{args.dataset}.yml") as f:
