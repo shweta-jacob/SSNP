@@ -230,8 +230,8 @@ def buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_rat
         aggr: aggregation method. mean, sum, or gcn. 
     '''
     input_channels = hidden_dim1
-    # if args.use_nodeid:
-    #     input_channels = 64
+    if args.use_nodeid:
+        input_channels = 64
 
     num_clusters1 = 500
     num_clusters2 = 200
@@ -274,20 +274,35 @@ def buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_rat
         raise NotImplementedError
     plain_gnn = GLASS(conv,
                        torch.nn.ModuleList([pool_fn1])).to(config.device)
-    # if args.use_nodeid:
-    #     print("load ", f"./Emb/{args.dataset}_64.pt")
-    #     emb = torch.load(f"./Emb/{args.dataset}_64.pt",
-    #                      map_location=torch.device('cpu')).detach()
-    #
+    if args.use_nodeid:
+        print("load ", f"./Emb/{args.dataset}_64.pt")
+        emb = torch.load(f"./Emb/{args.dataset}_64.pt",
+                         map_location=torch.device('cpu')).detach()
+
     #     # plain_gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
-    #     gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
-    #     gnn.input_emb.to(config.device)
+        gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
+        gnn.input_emb.to(config.device)
         # plain_gnn.input_emb.to(config.device)
     # emb = torch.load(f"./subgraph_emb/cut_ratio_emb.pt",
     #                  map_location=torch.device('cpu')).detach()
     # gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
     # gnn.input_emb.to(config.device)
+    from prettytable import PrettyTable
+    # https://stackoverflow.com/a/62508086
+    def count_parameters(model):
+        table = PrettyTable(["Modules", "Parameters"])
+        total_params = 0
+        for name, parameter in model.named_parameters():
+            if not parameter.requires_grad:
+                continue
+            params = parameter.numel()
+            table.add_row([name, params])
+            total_params += params
+        print(table)
+        print(f"Total Trainable Params: {total_params}")
+        return total_params
     ensemble = models.Ensemble(plain_gnn, gnn, hidden_dim2, output_channels)
+    count_parameters(ensemble)
     # ensemble.input_emb = emb
     return ensemble
 

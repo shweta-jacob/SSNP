@@ -25,6 +25,7 @@ def train(optimizer, model, dataset, subgraph_assignment, metrics, loss_fn, prev
         alpha2 = beta * (clustering_loss - prev_clustering_loss)
         all_losses = torch.Tensor([alpha1, alpha2])
         final_loss = torch.softmax(all_losses, dim=-1)
+    print(f'Classification Loss: {classification_loss}')
     loss = final_loss[0] * classification_loss + final_loss[1] * clustering_loss
     loss.backward()
     optimizer.step()

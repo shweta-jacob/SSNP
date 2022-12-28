@@ -1,6 +1,7 @@
 import numpy as np
 from torch.nn.utils.rnn import pad_sequence
 from torch.nn.functional import one_hot
+import scipy.sparse as ssp
 import torch
 from torch_geometric.utils import is_undirected, to_undirected, negative_sampling, to_networkx
 from torch_geometric.data import Data
@@ -31,10 +32,28 @@ class BaseGraph(Data):
         # use node degree as node features.
         adj = torch.sparse_coo_tensor(self.edge_index, self.edge_attr,
                                       (self.x.shape[0], self.x.shape[0]))
-        degree = torch.sparse.sum(adj, dim=1).to_dense().to(torch.int64)
-        degree = torch.div(degree, mod, rounding_mode='floor')
-        degree = torch.unique(degree, return_inverse=True)[1]
-        self.x = degree.reshape(self.x.shape[0], 1, -1)
+
+        # new_adj = ssp.csr_matrix(
+        #     (self.edge_attr, (self.edge_index[0], self.edge_index[1])),
+        #     shape=(self.x.shape[0], self.x.shape[0]))
+        # new_adj_sq = new_adj @ new_adj
+        # new_adj_cube = new_adj @ new_adj_sq
+        # u, v, r = ssp.find(new_adj_sq)
+        # adj_sq = torch.sparse_coo_tensor(torch.Tensor([[u], [v]]).reshape(2, len(u)), torch.ones(len(u)),
+        #                                  (self.x.shape[0], self.x.shape[0]))
+        # u, v, r = ssp.find(new_adj_cube)
+        # adj_cube = torch.sparse_coo_tensor(torch.Tensor([[u], [v]]).reshape(2, len(u)), torch.ones(len(u)),
+        #                                    (self.x.shape[0], self.x.shape[0]))
+        degree1 = torch.sparse.sum(adj, dim=1).to_dense().to(torch.int64)
+        # degree2 = torch.sparse.sum(adj_sq, dim=1).to_dense().to(torch.int64)
+        # degree3 = torch.sparse.sum(adj_cube, dim=1).to_dense().to(torch.int64)
+        degree1 = torch.div(degree1, mod, rounding_mode='floor')
+        # degree2 = torch.div(degree2, mod, rounding_mode='floor')
+        # degree3 = torch.div(degree3, mod, rounding_mode='floor')
+        # degree = torch.unique(degree, return_inverse=True)[1]
+        # self.x = torch.cat([degree1.reshape(self.x.shape[0], 1, -1), degree2.reshape(self.x.shape[0], 1, -1),
+        #                     degree3.reshape(self.x.shape[0], 1, -1)], dim=-1)
+        self.x = degree1.reshape(self.x.shape[0], 1, -1)
 
     def setOneFeature(self):
         # use homogeneous node features.

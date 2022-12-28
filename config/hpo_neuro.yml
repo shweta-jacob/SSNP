@@ -2,9 +2,9 @@ aggr: gcn
 batch_size: 99
 conv_layer: 1
 dropout: 0.5
-hidden_dim1: 7
-hidden_dim2: 7
-lr: 0.002
+hidden_dim1: 64
+hidden_dim2: 64
+lr: 0.001
 pool: sum
 resi: 0.2
 z_ratio: 0.85
