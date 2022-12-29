@@ -212,11 +212,11 @@ def split():
             return tfunc(ds, bs, True, False)
     else:
 
-        def loader_fn(ds, bs):
-            return SubGDataset.GDataloader(ds, bs)
+        def loader_fn(ds, sa, bs):
+            return SubGDataset.GDataloader(ds, sa, bs)
 
-        def tloader_fn(ds, bs):
-            return SubGDataset.GDataloader(ds, bs, shuffle=True)
+        def tloader_fn(ds, sa, bs):
+            return SubGDataset.GDataloader(ds, sa, bs, shuffle=True)
 
 
 def buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_ratio, aggr):
@@ -341,9 +341,9 @@ def test(f,
         split()
         gnn = buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_ratio,
                          aggr)
-        # trn_loader = loader_fn(trn_dataset, batch_size)
-        # val_loader = tloader_fn(val_dataset, batch_size)
-        # tst_loader = tloader_fn(tst_dataset, batch_size)
+        trn_loader = loader_fn(trn_dataset, train_subgraph_assignment, batch_size)
+        val_loader = tloader_fn(val_dataset, val_subgraph_assignment, batch_size)
+        tst_loader = tloader_fn(tst_dataset, test_subgraph_assignment, batch_size)
         optimizer = Adam(gnn.parameters(), lr=lr, weight_decay=1e-4)
         scd = lr_scheduler.ReduceLROnPlateau(optimizer,
                                              factor=resi,
@@ -359,21 +359,20 @@ def test(f,
         prev_clustering_loss = 0
         for i in range(20000):
             t1 = time.time()
-            train_score, loss, classification_loss, clustering_loss = train.train(optimizer, gnn, trn_dataset,
-                                                                     train_subgraph_assignment, score_fn, loss_fn,
+            train_score, loss, classification_loss, clustering_loss = train.train(optimizer, gnn, trn_loader,
+                                                                                  score_fn, loss_fn,
                                                                      prev_classification_loss, prev_clustering_loss)
             prev_classification_loss = classification_loss
             prev_clustering_loss = clustering_loss
             trn_time.append(time.time() - t1)
             if i % 10 == 0:
-                training_losses.append(loss.detach().numpy())
+                training_losses.append(loss)
                 epochs.append(i)
             scd.step(loss)
 
             if i >= 1:
                 score, _ = train.test(f,gnn,
-                                      val_dataset,
-                                      val_subgraph_assignment,
+                                      val_loader,
                                       score_fn,
                                       loss_fn=loss_fn)
 
@@ -381,8 +380,7 @@ def test(f,
                     early_stop = 0
                     val_score = score
                     score, _ = train.test(f,gnn,
-                                          tst_dataset,
-                                          test_subgraph_assignment,
+                                          tst_loader,
                                           score_fn,
                                           loss_fn=loss_fn)
                     tst_score = score
@@ -391,8 +389,7 @@ def test(f,
                         flush=True, file=f)
                 elif score >= val_score - 1e-5:
                     score, _ = train.test(f,gnn,
-                                          tst_dataset,
-                                          test_subgraph_assignment,
+                                          tst_loader,
                                           score_fn,
                                           loss_fn=loss_fn)
                     tst_score = max(score, tst_score)
@@ -403,7 +400,7 @@ def test(f,
                     early_stop += 1
                     if i % 10 == 0:
                         print(
-                            f"iter {i} loss {loss:.4f} train {train_score:.4f} val {score:.4f} tst {train.test(f, gnn, tst_dataset, test_subgraph_assignment, score_fn, loss_fn=loss_fn)[0]:.4f}",
+                            f"iter {i} loss {loss:.4f} train {train_score:.4f} val {score:.4f} tst {train.test(f, gnn, tst_loader, score_fn, loss_fn=loss_fn)[0]:.4f}",
                             flush=True, file=f)
             if val_score >= 1 - 1e-5:
                 early_stop += 1
