@@ -1,5 +1,6 @@
 from math import ceil
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -134,20 +135,22 @@ class GLASSConv(torch.nn.Module):
                  out_channels: int,
                  activation=nn.ReLU(inplace=True),
                  aggr="mean",
-                 z_ratio=0.8,
+                 z_ratio=0.5,
                  dropout=0.2):
         super().__init__()
         self.trans_fns = nn.ModuleList([
+            nn.Linear(in_channels, out_channels),
             nn.Linear(in_channels, out_channels)
         ])
-        # self.comb_fns = nn.ModuleList([
-        #     nn.Linear(in_channels + out_channels, out_channels)
-        # ])
+        self.comb_fns = nn.ModuleList([
+            nn.Linear(in_channels + out_channels, out_channels),
+            nn.Linear(in_channels + out_channels, out_channels)
+        ])
         self.adj = torch.sparse_coo_tensor(size=(0, 0))
         self.activation = activation
         self.aggr = aggr
-        # self.gn = GraphNorm(out_channels)
-        # self.z_ratio = z_ratio
+        self.gn = GraphNorm(out_channels)
+        self.z_ratio = z_ratio
         self.reset_parameters()
         self.dropout = dropout
 
@@ -158,15 +161,28 @@ class GLASSConv(torch.nn.Module):
         #     _.reset_parameters()
         # self.gn.reset_parameters()
 
-    def forward(self, x_, edge_index, edge_weight):
+    def forward(self, x_, edge_index, edge_weight, mask):
         if self.adj.shape[0] == 0:
             n_node = x_.shape[0]
             self.adj = buildAdj(edge_index, edge_weight, n_node, self.aggr)
 
-        x = self.activation(self.trans_fns[0](x_))
+        # transform node features with different parameters individually.
+        x1 = self.activation(self.trans_fns[1](x_))
+        x0 = self.activation(self.trans_fns[0](x_))
+        # mix transformed feature.
+        x = torch.where(mask, self.z_ratio * x1 + (1 - self.z_ratio) * x0,
+                        self.z_ratio * x0 + (1 - self.z_ratio) * x1)
         # pass messages.
         x = self.adj @ x
+        x = self.gn(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
+        x = torch.cat((x, x_), dim=-1)
+        # transform node features with different parameters individually.
+        x1 = self.comb_fns[1](x)
+        x0 = self.comb_fns[0](x)
+        # mix transformed feature.
+        x = torch.where(mask, self.z_ratio * x1 + (1 - self.z_ratio) * x0,
+                        self.z_ratio * x0 + (1 - self.z_ratio) * x1)
         return x
 
 
@@ -248,13 +264,13 @@ class EmbZGConv(nn.Module):
         x = F.dropout(x, p=self.dropout, training=self.training)
         # pass messages at each layer.
         for layer, conv in enumerate(self.convs[:-1]):
-            x = conv(x, edge_index, edge_weight)
+            x = conv(x, edge_index, edge_weight, mask)
             xs.append(x)
             if not (self.gns is None):
                 x = self.gns[layer](x)
             x = self.activation(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
-        x = self.convs[-1](x, edge_index, edge_weight)
+        x = self.convs[-1](x, edge_index, edge_weight, mask)
         xs.append(x)
 
         if self.jk:
@@ -377,7 +393,7 @@ class Ensemble(torch.nn.Module):
         self.spectral_gnn = spectral_gnn
         self.hidden_channels2 = hidden_channels2
         self.k = 15
-        self.preds = torch.nn.ModuleList([MLP(input_channels=hidden_channels2 * 8,
+        self.preds = torch.nn.ModuleList([MLP(input_channels=hidden_channels2 * 3,
                                               hidden_channels=hidden_channels2, output_channels=output_channels,
                                               num_layers=3, dropout=0.5)])
     # def Pool(self, emb, subG_node, pool):
@@ -415,7 +431,7 @@ class SpectralNet(torch.nn.Module):
                                       input_channels,
                                       scale_grad_by_freq=False)
         self.emb_gn = GraphNorm(input_channels)
-        self.num_clusters1 = 8
+        self.num_clusters1 = 3
         self.num_clusters2 = 5
         self.num_clusters3 = 4
         self.num_clusters4 = 3
@@ -445,18 +461,18 @@ class SpectralNet(torch.nn.Module):
         self.activation = activation
         self.dropout = dropout
         self.mlp1 = Linear(hidden_channels1, self.num_clusters1)
-        self.mlp2 = Linear(hidden_channels2, self.num_clusters2)
-        self.mlp3 = Linear(hidden_channels2, self.num_clusters3)
-        self.mlp4 = Linear(hidden_channels2, self.num_clusters4)
+        # self.mlp2 = Linear(hidden_channels2, self.num_clusters2)
+        # self.mlp3 = Linear(hidden_channels2, self.num_clusters3)
+        # self.mlp4 = Linear(hidden_channels2, self.num_clusters4)
         self.num_layers = num_layers
-        self.k1 = 8
+        self.k1 = 3
         self.k2 = 5
         self.k3 = 4
         self.k4 = 3
-        self.global_sort1 = aggr.SortAggregation(k=self.k1)
-        self.global_sort2 = aggr.SortAggregation(k=self.k2)
-        self.global_sort3 = aggr.SortAggregation(k=self.k3)
-        self.global_sort4 = aggr.SortAggregation(k=self.k4)
+        # self.global_sort1 = aggr.SortAggregation(k=self.k1)
+        # self.global_sort2 = aggr.SortAggregation(k=self.k2)
+        # self.global_sort3 = aggr.SortAggregation(k=self.k3)
+        # self.global_sort4 = aggr.SortAggregation(k=self.k4)
 
         # self.preds = torch.nn.ModuleList([MLP(input_channels=(self.k1 + self.k2 + self.k3 + self.k4),
         #                                       hidden_channels=2 * hidden_channels2, output_channels=output_channels,
@@ -477,18 +493,28 @@ class SpectralNet(torch.nn.Module):
         #         gn.reset_parameters()
 
     def forward(self, x, edge_index, edge_weight, pos, subgraph_assignment):
+        mask = (torch.zeros((x.shape[0]), device=x.device) < 0.5).reshape(-1, 1)
         # Propagate node feats
         x1 = self.input_emb(x).reshape(x.shape[0], -1)
         x1 = self.emb_gn(x1)
         # x = self.convs[-1](x, edge_index, edge_weight)
         # x = self.activation(x)
-        x = self.conv1(x1, edge_index, edge_weight)
+        x = self.conv1(x1, edge_index, edge_weight, mask)
         x = self.activation(x)
         x = self.bns[0](x)
-        x = self.conv5(x, edge_index, edge_weight)
+        # x = self.conv2(x, edge_index, edge_weight)
+        # x = self.activation(x)
+        # x = self.bns[1](x)
+        # x = self.conv3(x, edge_index, edge_weight)
+        # x = self.activation(x)
+        # x = self.bns[2](x)
+        # x = self.conv4(x, edge_index, edge_weight)
+        # x = self.activation(x)
+        # x = self.bns[3](x)
+        x = self.conv5(x, edge_index, edge_weight, mask)
         x = self.activation(x)
         x = self.bns[4](x)
-        x = self.conv6(x, edge_index, edge_weight)
+        x = self.conv6(x, edge_index, edge_weight, mask)
         x = self.activation(x)
         x = self.bns[5](x)
 
@@ -502,13 +528,10 @@ class SpectralNet(torch.nn.Module):
         out, out_adj, mc_loss1, o_loss1 = dense_mincut_pool(x, adj, s)
         out = out.reshape(self.num_clusters1, self.hidden_channels1)
         embs = []
-        embs = []
         for row in subgraph_assignment:
             node_emb = row.reshape(x.shape[0], 1) * x
             cluster_emb = torch.transpose(torch.softmax(s, dim=-1), 0, 1) @ node_emb
-            embs.append(torch.cat((cluster_emb[0], cluster_emb[1], cluster_emb[2], cluster_emb[3], cluster_emb[4],
-                                   cluster_emb[5], cluster_emb[6], cluster_emb[7]),
-                                  dim=-1))
+            embs.append(torch.cat((cluster_emb[0], cluster_emb[1], cluster_emb[2])))
         emb1 = torch.stack(embs, dim=0)
         # for idx, subgraph in enumerate(pos):
         #     r = subgraph_to_cluster1[:, idx]

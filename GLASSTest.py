@@ -17,7 +17,7 @@ import datasets
 from artificial import graph1, graph3, graph4, graph5, graph2, graph7, graph8, graph9
 from impl import models, SubGDataset, train, metrics, utils, config
 from impl.models import SpectralNet
-from impl.plain_gnn_models import GLASS, EmbZGConv, MeanPool, MaxPool, AddPool, SizePool, GLASSConv
+# from impl.plain_gnn_models import GLASS, EmbZGConv, MeanPool, MaxPool, AddPool, SizePool, GLASSConv
 
 parser = argparse.ArgumentParser(description='')
 # Dataset settings
@@ -250,30 +250,30 @@ def buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_rat
                       activation=nn.ELU(inplace=True),
                       jk=jk).to(config.device)
 
-    conv = EmbZGConv(hidden_dim1,
-                            hidden_dim2,
-                            conv_layer,
-                            max_deg=max_deg,
-                            activation=nn.ELU(inplace=True),
-                            jk=jk,
-                            dropout=dropout,
-                            conv=functools.partial(GLASSConv,
-                                                   aggr=aggr,
-                                                   z_ratio=z_ratio,
-                                                   dropout=dropout),
-                            gn=True)
-    pool_fn_fn = {
-        "mean": MeanPool,
-        "max": MaxPool,
-        "sum": AddPool,
-        "size": SizePool
-    }
-    if pool in pool_fn_fn:
-        pool_fn1 = pool_fn_fn[pool]()
-    else:
-        raise NotImplementedError
-    plain_gnn = GLASS(conv,
-                       torch.nn.ModuleList([pool_fn1])).to(config.device)
+    # conv = EmbZGConv(hidden_dim1,
+    #                         hidden_dim2,
+    #                         conv_layer,
+    #                         max_deg=max_deg,
+    #                         activation=nn.ELU(inplace=True),
+    #                         jk=jk,
+    #                         dropout=dropout,
+    #                         conv=functools.partial(GLASSConv,
+    #                                                aggr=aggr,
+    #                                                z_ratio=z_ratio,
+    #                                                dropout=dropout),
+    #                         gn=True)
+    # pool_fn_fn = {
+    #     "mean": MeanPool,
+    #     "max": MaxPool,
+    #     "sum": AddPool,
+    #     "size": SizePool
+    # }
+    # if pool in pool_fn_fn:
+    #     pool_fn1 = pool_fn_fn[pool]()
+    # else:
+    #     raise NotImplementedError
+    # plain_gnn = GLASS(conv,
+    #                    torch.nn.ModuleList([pool_fn1])).to(config.device)
     if args.use_nodeid:
         print("load ", f"./Emb/{args.dataset}_64.pt")
         emb = torch.load(f"./Emb/{args.dataset}_64.pt",
@@ -301,7 +301,7 @@ def buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_rat
         print(table)
         print(f"Total Trainable Params: {total_params}")
         return total_params
-    ensemble = models.Ensemble(plain_gnn, gnn, hidden_dim2, output_channels)
+    ensemble = models.Ensemble(None, gnn, hidden_dim2, output_channels)
     count_parameters(ensemble)
     # ensemble.input_emb = emb
     return ensemble
