@@ -13,10 +13,14 @@ def train(optimizer, model, dataloader, metrics, loss_fn, prev_classification_lo
     '''
     model.train()
     total_loss = []
+    preds = []
+    ys = []
     for batch in dataloader:
         optimizer.zero_grad()
         beta = 0.1
         pred, mc_loss, o_loss, subgraph_mc_loss, ent_loss = model(*batch[:-1])
+        preds.append(pred)
+        ys.append(batch[-1])
         classification_loss = loss_fn(pred, batch[-1])
         clustering_loss = mc_loss + o_loss + subgraph_mc_loss + ent_loss
         final_loss = [1, 1]
@@ -30,7 +34,9 @@ def train(optimizer, model, dataloader, metrics, loss_fn, prev_classification_lo
         loss.backward()
         total_loss.append(loss.detach().item())
         optimizer.step()
-    return metrics(pred.detach().cpu().numpy(), batch[-1].cpu().numpy()), sum(total_loss) / len(total_loss), classification_loss, clustering_loss
+    pred = torch.cat(preds, dim=0)
+    y = torch.cat(ys, dim=0)
+    return metrics(pred.detach().cpu().numpy(), y.cpu().numpy()), sum(total_loss) / len(total_loss), classification_loss, clustering_loss
 
 
 @torch.no_grad()
