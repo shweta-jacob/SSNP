@@ -2,9 +2,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_sequence
-from torch_geometric.nn import GCNConv
+from torch_geometric import utils
+from torch_geometric.nn import GCNConv, global_mean_pool, global_max_pool, global_add_pool, dense_mincut_pool
 from torch_geometric.nn.norm import GraphNorm, GraphSizeNorm
-from torch_geometric.nn.glob.glob import global_mean_pool, global_add_pool, global_max_pool
+
 from .utils import pad2batch
 
 
@@ -333,6 +334,7 @@ class GLASS(nn.Module):
         super().__init__()
         self.subg_conv = subg_conv
         self.comp_conv = comp_conv
+        self.mlp1 = nn.Linear(40, 2)
         self.preds = preds
         self.pools = pools
 
@@ -359,7 +361,7 @@ class GLASS(nn.Module):
     def Pool(self, sub_emb, comp_emb, subG_node, num_nodes, device):
         batch, pos = pad2batch(subG_node)
         emb_subg = sub_emb[pos]
-        plain_gnn_emb_sub = comp_emb[pos]
+        # plain_gnn_emb_sub = comp_emb[pos]
 
         emb_comp_mean = []
         emb_comp_sum = []
@@ -367,27 +369,38 @@ class GLASS(nn.Module):
         graph_emb = torch.sum(comp_emb, dim=0)
         emb_subg_mean = global_mean_pool(emb_subg, batch)
         emb_subg_sum = global_add_pool(emb_subg, batch)
-        plain_gnn_emb_sub_sum = global_add_pool(plain_gnn_emb_sub, batch)
+        # plain_gnn_emb_sub_sum = global_add_pool(plain_gnn_emb_sub, batch)
         emb_subg = GraphSizeNorm()(emb_subg, batch)
         emb_subg_size = global_add_pool(emb_subg, batch)
-        for idx, subgraph in enumerate(subG_node):
-            sum = graph_emb - plain_gnn_emb_sub_sum[idx]
-            emb_comp_mean.append(torch.div(sum, num_nodes - len(subgraph)).to(device))
-            emb_comp_sum.append(sum)
-            # sum = GraphSizeNorm()(sum, batch)
-            # emb_comp_size.append(global_add_pool(sum, batch))
-        emb_comp_mean = torch.stack(emb_comp_mean)
-        emb_comp_sum = torch.stack(emb_comp_sum)
+        # for idx, subgraph in enumerate(subG_node):
+        #     sum = graph_emb - plain_gnn_emb_sub_sum[idx]
+        #     emb_comp_mean.append(torch.div(sum, num_nodes - len(subgraph)).to(device))
+        #     emb_comp_sum.append(sum)
+        #     # sum = GraphSizeNorm()(sum, batch)
+        #     # emb_comp_size.append(global_add_pool(sum, batch))
+        # emb_comp_mean = torch.stack(emb_comp_mean)
+        # emb_comp_sum = torch.stack(emb_comp_sum)
         # emb_comp_size = torch.stack(emb_comp_size)
-        emb = torch.cat([emb_subg_mean, emb_subg_sum, emb_subg_size, emb_comp_mean, emb_comp_sum], dim=-1)
+        emb = torch.cat([emb_subg_mean, emb_subg_sum, emb_subg_size], dim=-1)
         return emb
 
-    def forward(self, x, edge_index, edge_weight, subG_node, z=None, device=-1, id=0):
+    def forward(self, x, edge_index, edge_weight, subG_node, z=None, subgraph_assignment=None, device=-1, id=0):
         num_nodes = len(x)
         subg_emb = self.SubNodeEmb(x, edge_index, edge_weight, z)
         comp_emb = self.CompNodeEmb(x, edge_index, edge_weight)
+        s = self.mlp1(comp_emb)
+        ent_loss1 = (-torch.softmax(s, dim=-1) * torch.log(torch.softmax(s, dim=-1) + 1e-15)).sum(dim=-1).mean()
+        adj = utils.to_dense_adj(edge_index, edge_attr=edge_weight, max_num_nodes=x.shape[0])
+        out, out_adj, mc_loss1, o_loss1 = dense_mincut_pool(comp_emb, adj, s)
+        out = out.reshape(2, 40)
+        embs = []
+        for row in subgraph_assignment:
+            node_emb = row.reshape(comp_emb.shape[0], 1) * comp_emb
+            cluster_emb = torch.transpose(torch.softmax(s, dim=-1), 0, 1) @ node_emb
+            embs.append(torch.cat((out[0] - cluster_emb[0], out[1] - cluster_emb[1]), dim=-1))
+        emb1 = torch.stack(embs, dim=0)
         emb = self.Pool(subg_emb, comp_emb, subG_node, num_nodes, device)
-        return self.preds[id](emb)
+        return self.preds[id](torch.cat((emb, emb1), dim=-1))
 
 
 # models used for producing node embeddings.

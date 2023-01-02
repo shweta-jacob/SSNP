@@ -49,6 +49,7 @@ if args.use_seed:
 baseG = datasets.load_dataset(args.dataset)
 
 trn_dataset, val_dataset, tst_dataset = None, None, None
+train_subgraph_assignment, val_subgraph_assignment, test_subgraph_assignment = None, None, None
 max_deg, output_channels = 0, 1
 score_fn = None
 
@@ -79,8 +80,14 @@ def split():
     load and split dataset.
     '''
     # initialize and split dataset
-    global trn_dataset, val_dataset, tst_dataset
+    global trn_dataset, val_dataset, tst_dataset, baseG
+    global train_subgraph_assignment, val_subgraph_assignment, test_subgraph_assignment
     global max_deg, output_channels, loader_fn, tloader_fn
+    baseG = datasets.load_dataset(args.dataset)
+    if baseG.y.unique().shape[0] == 2:
+        baseG.y = baseG.y.to(torch.float)
+    else:
+        baseG.y = baseG.y.to(torch.int64)
     # initialize node features
     if args.use_deg:
         baseG.setDegreeFeature()
@@ -97,21 +104,37 @@ def split():
     trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
     tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
+    train_subgraph_assignment = torch.zeros((trn_dataset.pos.shape[0], trn_dataset.x.shape[0])).to(config.device)
+    val_subgraph_assignment = torch.zeros((val_dataset.pos.shape[0], val_dataset.x.shape[0])).to(config.device)
+    test_subgraph_assignment = torch.zeros((tst_dataset.pos.shape[0], tst_dataset.x.shape[0])).to(config.device)
+    for idx, pos in enumerate(trn_dataset.pos):
+        for node in pos:
+            if node != -1:
+                train_subgraph_assignment[idx][node] = 1
+    for idx, pos in enumerate(val_dataset.pos):
+        for node in pos:
+            if node != -1:
+                val_subgraph_assignment[idx][node] = 1
+    for idx, pos in enumerate(tst_dataset.pos):
+        for node in pos:
+            if node != -1:
+                test_subgraph_assignment[idx][node] = 1
     # choice of dataloader
     if args.use_maxzeroone:
 
-        def tfunc(ds, bs, shuffle=True, drop_last=True):
+        def tfunc(ds, sa, bs, shuffle=True, drop_last=True):
             return SubGDataset.ZGDataloader(ds,
+                                            sa,
                                             bs,
                                             z_fn=utils.MaxZOZ,
                                             shuffle=shuffle,
                                             drop_last=drop_last)
 
-        def loader_fn(ds, bs):
-            return tfunc(ds, bs)
+        def loader_fn(ds, sa, bs):
+            return tfunc(ds, sa, bs)
 
-        def tloader_fn(ds, bs):
-            return tfunc(ds, bs, True, False)
+        def tloader_fn(ds, sa, bs):
+            return tfunc(ds, sa, bs, True, False)
     else:
 
         def loader_fn(ds, bs):
@@ -220,11 +243,12 @@ def test(pool="size",
         start_time = time.time()
         set_seed((1 << repeat) - 1)
         print(f"repeat {repeat}")
+        split()
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio,
                          aggr)
-        trn_loader = loader_fn(trn_dataset, batch_size)
-        val_loader = tloader_fn(val_dataset, batch_size)
-        tst_loader = tloader_fn(tst_dataset, batch_size)
+        trn_loader = loader_fn(trn_dataset, train_subgraph_assignment, batch_size)
+        val_loader = tloader_fn(val_dataset, val_subgraph_assignment, batch_size)
+        tst_loader = tloader_fn(tst_dataset, test_subgraph_assignment, batch_size)
         optimizer = Adam(gnn.parameters(), lr=lr)
         scd = lr_scheduler.ReduceLROnPlateau(optimizer,
                                              factor=resi,
