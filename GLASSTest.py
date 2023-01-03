@@ -194,7 +194,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
         subg_conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
         comp_conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
 
-    mlp = nn.Linear(hidden_dim * (conv_layer) * 5 if jk else hidden_dim * 5,
+    mlp = nn.Linear(hidden_dim * (conv_layer) * 6 if jk else hidden_dim * 5,
                     output_channels)
 
     pool_fn_fn = {
@@ -232,11 +232,6 @@ def test(pool="size",
     '''
     outs = []
     t1 = time.time()
-    # we set batch_size = tst_dataset.y.shape[0] // num_div.
-    num_div = tst_dataset.y.shape[0] / batch_size
-    # we use num_div to calculate the number of iteration per epoch and count the number of iteration.
-    if args.dataset in ["density", "component", "cut_ratio", "coreness"]:
-        num_div /= 5
 
     outs = []
     for repeat in range(args.repeat):
@@ -244,6 +239,11 @@ def test(pool="size",
         set_seed((1 << repeat) - 1)
         print(f"repeat {repeat}")
         split()
+        # we set batch_size = tst_dataset.y.shape[0] // num_div.
+        num_div = tst_dataset.y.shape[0] / batch_size
+        # we use num_div to calculate the number of iteration per epoch and count the number of iteration.
+        if args.dataset in ["density", "component", "cut_ratio", "coreness"]:
+            num_div /= 5
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio,
                          aggr)
         trn_loader = loader_fn(trn_dataset, train_subgraph_assignment, batch_size)
@@ -252,18 +252,19 @@ def test(pool="size",
         optimizer = Adam(gnn.parameters(), lr=lr)
         scd = lr_scheduler.ReduceLROnPlateau(optimizer,
                                              factor=resi,
-                                             min_lr=5e-5)
+                                             min_lr=5e-5,
+                                             patience=50)
         val_score = 0
         tst_score = 0
         early_stop = 0
         trn_time = []
         for i in range(300):
             t1 = time.time()
-            loss = train.train(optimizer, gnn, trn_loader, loss_fn, config.device)
+            train_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn, config.device)
             trn_time.append(time.time() - t1)
             scd.step(loss)
 
-            if i >= 100 / num_div:
+            if i >= 1:
                 score, _ = train.test(gnn,
                                       val_loader,
                                       score_fn,
@@ -278,7 +279,7 @@ def test(pool="size",
                                           loss_fn=loss_fn, device=config.device)
                     tst_score = score
                     print(
-                        f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {tst_score:.4f}",
+                        f"iter {i} loss {loss:.4f} train {train_score: .4f} val {val_score:.4f} tst {tst_score:.4f}",
                         flush=True)
                 elif score >= val_score - 1e-5:
                     score, _ = train.test(gnn,
@@ -287,13 +288,13 @@ def test(pool="size",
                                           loss_fn=loss_fn, device=config.device)
                     tst_score = max(score, tst_score)
                     print(
-                        f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {score:.4f}",
+                        f"iter {i} loss {loss:.4f} train {train_score: .4f} val {val_score:.4f} tst {score:.4f}",
                         flush=True)
                 else:
                     early_stop += 1
                     if i % 10 == 0:
                         print(
-                            f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn, device=config.device)[0]:.4f}",
+                            f"iter {i} loss {loss:.4f} train {train_score: .4f} val {score:.4f} tst {train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn, device=config.device)[0]:.4f}",
                             flush=True)
             if val_score >= 1 - 1e-5:
                 early_stop += 1
@@ -318,7 +319,6 @@ with open(f"config/{args.dataset}.yml") as f:
 
 print("params", params, flush=True)
 start = time.time()
-split()
 test(**(params))
 end = time.time()
 print(f"Time taken for exp: {end - start}")

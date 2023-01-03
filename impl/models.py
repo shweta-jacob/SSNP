@@ -249,6 +249,7 @@ class EmbZGConv(nn.Module):
             mask = (z > 0.5).reshape(-1, 1)
         # convert integer input to vector node features.
         x = self.input_emb(x).reshape(x.shape[0], -1)
+        x = F.normalize(input=x, p=1, dim=1)
         x = self.emb_gn(x)
         xs = []
         x = F.dropout(x, p=self.dropout, training=self.training)
@@ -334,7 +335,7 @@ class GLASS(nn.Module):
         super().__init__()
         self.subg_conv = subg_conv
         self.comp_conv = comp_conv
-        self.mlp1 = nn.Linear(40, 2)
+        self.mlp1 = nn.Linear(8, 3)
         self.preds = preds
         self.pools = pools
 
@@ -392,15 +393,15 @@ class GLASS(nn.Module):
         ent_loss1 = (-torch.softmax(s, dim=-1) * torch.log(torch.softmax(s, dim=-1) + 1e-15)).sum(dim=-1).mean()
         adj = utils.to_dense_adj(edge_index, edge_attr=edge_weight, max_num_nodes=x.shape[0])
         out, out_adj, mc_loss1, o_loss1 = dense_mincut_pool(comp_emb, adj, s)
-        out = out.reshape(2, 40)
+        out = out.reshape(3, 8)
         embs = []
         for row in subgraph_assignment:
             node_emb = row.reshape(comp_emb.shape[0], 1) * comp_emb
             cluster_emb = torch.transpose(torch.softmax(s, dim=-1), 0, 1) @ node_emb
-            embs.append(torch.cat((out[0] - cluster_emb[0], out[1] - cluster_emb[1]), dim=-1))
+            embs.append(torch.cat((out[0] - cluster_emb[0], out[1] - cluster_emb[1], out[2] - cluster_emb[2]), dim=-1))
         emb1 = torch.stack(embs, dim=0)
         emb = self.Pool(subg_emb, comp_emb, subG_node, num_nodes, device)
-        return self.preds[id](torch.cat((emb, emb1), dim=-1))
+        return self.preds[id](torch.cat((emb, emb1), dim=-1)), mc_loss1 + o_loss1 + ent_loss1
 
 
 # models used for producing node embeddings.
