@@ -220,26 +220,20 @@ def buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_rat
     # if args.use_nodeid:
     #     input_channels = 64
 
-    num_clusters1 = 500
-    num_clusters2 = 200
     average_nodes = int(trn_dataset.x.size(0))
     print(f"Average number of nodes in graph: {average_nodes}")
-    # print(f'Number of clusters in each layer: {num_clusters1}, {num_clusters2}', file=f)
     gnn = SpectralNet(input_channels,
                       hidden_dim1,
                       hidden_dim2,
                       output_channels,
                       conv_layer,
-                      average_nodes,
-                      num_clusters1,
-                      num_clusters2,
                       max_deg=max_deg,
                       activation=nn.ELU(inplace=True),
                       jk=jk).to(config.device)
 
     # if args.use_nodeid:
     #     print("load ", f"./Emb/{args.dataset}_64.pt")
-    #     emb = torch.load(f"./Emb/opt_64.pt",
+    #     emb = torch.load(f"./Emb/{args.dataset}_64.pt",
     #                      map_location=torch.device('cpu')).detach()
     #     gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
     #     gnn.input_emb.to(config.device)
@@ -279,6 +273,7 @@ def test(f,
         print(f"repeat {repeat}", file=f)
         gnn = buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_ratio,
                          aggr)
+        split()
         # trn_loader = loader_fn(trn_dataset, batch_size)
         # val_loader = tloader_fn(val_dataset, batch_size)
         # tst_loader = tloader_fn(tst_dataset, batch_size)
@@ -287,6 +282,9 @@ def test(f,
                                              factor=resi,
                                              min_lr=5e-5)
         val_score = 0
+        train_scores = []
+        val_scores = []
+        tst_scores = []
         tst_score = 0
         train_score = 0
         early_stop = 0
@@ -295,7 +293,7 @@ def test(f,
         epochs = []
         prev_classification_loss = 0
         prev_clustering_loss = 0
-        for i in range(20000):
+        for i in range(200):
             t1 = time.time()
             train_score, loss, classification_loss, clustering_loss = train.train(optimizer, gnn, trn_dataset,
                                                                      train_subgraph_assignment, score_fn, loss_fn,
@@ -303,12 +301,12 @@ def test(f,
             prev_classification_loss = classification_loss
             prev_clustering_loss = clustering_loss
             trn_time.append(time.time() - t1)
-            if i % 10 == 0:
-                training_losses.append(loss.detach().numpy())
-                epochs.append(i)
+            # if i % 10 == 0:
+            #     training_losses.append(loss.detach().numpy())
+            #     epochs.append(i)
             scd.step(loss)
 
-            if i >= 1:
+            if i >= 0:
                 score, _ = train.test(f,gnn,
                                       val_dataset,
                                       val_subgraph_assignment,
@@ -324,8 +322,12 @@ def test(f,
                                           score_fn,
                                           loss_fn=loss_fn)
                     tst_score = score
+                    val_scores.append(val_score)
+                    tst_scores.append(tst_score)
+                    train_scores.append(train_score)
+                    epochs.append(i+1)
                     print(
-                        f"iter {i} loss {loss:.4f} train {train_score:.4f} val {val_score:.4f} tst {tst_score:.4f}",
+                        f"iter {i + 1} loss {loss:.4f} train {train_score:.4f} val {val_score:.4f} tst {tst_score:.4f}",
                         flush=True, file=f)
                 elif score >= val_score - 1e-5:
                     score, _ = train.test(f,gnn,
@@ -334,28 +336,44 @@ def test(f,
                                           score_fn,
                                           loss_fn=loss_fn)
                     tst_score = max(score, tst_score)
+                    val_scores.append(val_score)
+                    tst_scores.append(tst_score)
+                    train_scores.append(train_score)
+                    epochs.append(i+1)
                     print(
-                        f"iter {i} loss {loss:.4f} train {train_score:.4f} val {val_score:.4f} tst {score:.4f}",
+                        f"iter {i + 1} loss {loss:.4f} train {train_score:.4f} val {val_score:.4f} tst {score:.4f}",
                         flush=True, file=f)
                 else:
                     early_stop += 1
-                    if i % 10 == 0:
-                        print(
-                            f"iter {i} loss {loss:.4f} train {train_score:.4f} val {score:.4f} tst {train.test(f, gnn, tst_dataset, test_subgraph_assignment, score_fn, loss_fn=loss_fn)[0]:.4f}",
+                    tst_score, _ = train.test(f, gnn,
+                                          tst_dataset,
+                                          test_subgraph_assignment,
+                                          score_fn,
+                                          loss_fn=loss_fn)
+                    print(
+                            f"iter {i + 1} loss {loss:.4f} train {train_score:.4f} val {score:.4f} tst {train.test(f, gnn, tst_dataset, test_subgraph_assignment, score_fn, loss_fn=loss_fn)[0]:.4f}",
                             flush=True, file=f)
+                    val_scores.append(score)
+                    tst_scores.append(tst_score)
+                    train_scores.append(train_score)
+                    epochs.append(i+1)
             if val_score >= 1 - 1e-5:
                 early_stop += 1
-            # if early_stop > 1000:
+            # if early_stop > 50:
             #     break
         print(
             f"end: epoch {i + 1}, train time {sum(trn_time):.2f} s, train {train_score:.4f} val {val_score:.3f}, tst {tst_score:.3f}",
             flush=True, file=f)
         outs.append(tst_score)
         figure(figsize=(8, 6))
-        plt.plot(np.array(epochs), np.array(training_losses))
+        # plt.xlim([1, 200])
+        plt.plot(np.array(epochs), np.array(train_scores))
+        plt.plot(np.array(epochs), np.array(val_scores))
+        plt.plot(np.array(epochs), np.array(tst_scores))
         # plt.xticks(ticks=[0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500, 8000, 8500, 9000, 9500, 10000])
         plt.xlabel("Epochs")
-        plt.ylabel("Training loss")
+        plt.ylabel("Accuracy")
+        plt.legend(['Train', 'Validation', 'Test'])
         plt.show()
     print(
         f"average {np.average(outs):.3f} error {np.std(outs) / np.sqrt(len(outs)):.3f}", file=f
