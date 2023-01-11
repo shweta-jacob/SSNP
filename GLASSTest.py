@@ -9,7 +9,7 @@ import yaml
 from matplotlib import pyplot as plt
 from matplotlib.pyplot import figure
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
-from torch.optim import Adam, lr_scheduler
+from torch.optim import Adam, lr_scheduler, SGD
 
 import datasets
 from artificial import graph1, graph3, graph4, graph5, graph2, graph7, graph8, graph9
@@ -217,8 +217,8 @@ def buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_rat
         aggr: aggregation method. mean, sum, or gcn. 
     '''
     input_channels = hidden_dim1
-    # if args.use_nodeid:
-    #     input_channels = 64
+    if args.use_nodeid:
+        input_channels = 64
 
     average_nodes = int(trn_dataset.x.size(0))
     print(f"Average number of nodes in graph: {average_nodes}")
@@ -231,12 +231,12 @@ def buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_rat
                       activation=nn.ELU(inplace=True),
                       jk=jk).to(config.device)
 
-    # if args.use_nodeid:
-    #     print("load ", f"./Emb/{args.dataset}_64.pt")
-    #     emb = torch.load(f"./Emb/{args.dataset}_64.pt",
-    #                      map_location=torch.device('cpu')).detach()
-    #     gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
-    #     gnn.input_emb.to(config.device)
+    if args.use_nodeid:
+        print("load ", f"./Emb/{args.dataset}_64.pt")
+        emb = torch.load(f"./Emb/{args.dataset}_64.pt",
+                         map_location=torch.device('cpu')).detach()
+        gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
+        gnn.input_emb.to(config.device)
     return gnn
 
 
@@ -265,7 +265,7 @@ def test(f,
     num_div = tst_dataset.y.shape[0] / batch_size
     # we use num_div to calculate the number of iteration per epoch and count the number of iteration.
     if args.dataset in ["density", "component", "cut_ratio", "coreness"]:
-        num_div /= 5
+        num_div /= 30
 
     outs = []
     for repeat in range(args.repeat):
@@ -277,10 +277,12 @@ def test(f,
         # trn_loader = loader_fn(trn_dataset, batch_size)
         # val_loader = tloader_fn(val_dataset, batch_size)
         # tst_loader = tloader_fn(tst_dataset, batch_size)
-        optimizer = Adam(gnn.parameters(), lr=lr, weight_decay=1e-4)
+        # optimizer = Adam(gnn.parameters(), lr=lr, weight_decay=1e-4)
+        optimizer = SGD(gnn.parameters(), lr=lr, weight_decay=1e-4, momentum=0.8)
         scd = lr_scheduler.ReduceLROnPlateau(optimizer,
                                              factor=resi,
-                                             min_lr=5e-5)
+                                             min_lr=5e-5,
+                                             patience=20)
         val_score = 0
         train_scores = []
         val_scores = []
@@ -293,7 +295,7 @@ def test(f,
         epochs = []
         prev_classification_loss = 0
         prev_clustering_loss = 0
-        for i in range(200):
+        for i in range(2000):
             t1 = time.time()
             train_score, loss, classification_loss, clustering_loss = train.train(optimizer, gnn, trn_dataset,
                                                                      train_subgraph_assignment, score_fn, loss_fn,
@@ -306,7 +308,7 @@ def test(f,
             #     epochs.append(i)
             scd.step(loss)
 
-            if i >= 0:
+            if i >= 1:
                 score, _ = train.test(f,gnn,
                                       val_dataset,
                                       val_subgraph_assignment,
@@ -345,11 +347,11 @@ def test(f,
                         flush=True, file=f)
                 else:
                     early_stop += 1
-                    tst_score, _ = train.test(f, gnn,
-                                          tst_dataset,
-                                          test_subgraph_assignment,
-                                          score_fn,
-                                          loss_fn=loss_fn)
+                    # tst_score, _ = train.test(f, gnn,
+                    #                       tst_dataset,
+                    #                       test_subgraph_assignment,
+                    #                       score_fn,
+                    #                       loss_fn=loss_fn)
                     print(
                             f"iter {i + 1} loss {loss:.4f} train {train_score:.4f} val {score:.4f} tst {train.test(f, gnn, tst_dataset, test_subgraph_assignment, score_fn, loss_fn=loss_fn)[0]:.4f}",
                             flush=True, file=f)
@@ -374,7 +376,7 @@ def test(f,
         plt.xlabel("Epochs")
         plt.ylabel("Accuracy")
         plt.legend(['Train', 'Validation', 'Test'])
-        plt.show()
+        # plt.show()
     print(
         f"average {np.average(outs):.3f} error {np.std(outs) / np.sqrt(len(outs)):.3f}", file=f
     )

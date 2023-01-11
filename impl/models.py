@@ -146,6 +146,14 @@ class GLASSConv(torch.nn.Module):
         self.reset_parameters()
         self.dropout = dropout
 
+        self._weights_init(self.trans_fns[0])
+        self._weights_init(self.comb_fns[0])
+
+    def _weights_init(self, lin_layer):
+        torch.nn.init.xavier_uniform_(lin_layer.weight.data)
+        if lin_layer.bias is not None:
+            lin_layer.bias.data.fill_(0.0)
+
     def reset_parameters(self):
         for _ in self.trans_fns:
             _.reset_parameters()
@@ -373,10 +381,10 @@ class SpectralNet(torch.nn.Module):
                                       input_channels,
                                       scale_grad_by_freq=False)
         self.emb_gn = GraphNorm(input_channels)
-        self.num_clusters1 = 70
-        self.num_clusters2 = 50
-        self.num_clusters3 = 30
-        self.num_clusters4 = 20
+        self.num_clusters1 = 5
+        self.num_clusters2 = 20
+        self.num_clusters3 = 20
+        self.num_clusters4 = 15
         self.hidden_channels1 = hidden_channels1
         self.hidden_channels2 = hidden_channels2
         self.bns = torch.nn.ModuleList()
@@ -384,48 +392,74 @@ class SpectralNet(torch.nn.Module):
         self.bns.append(GraphNorm(hidden_channels2))
         self.bns.append(GraphNorm(hidden_channels2))
         self.bns.append(GraphNorm(hidden_channels2))
+        self.bns.append(GraphNorm(hidden_channels2))
+        self.bns.append(GraphNorm(hidden_channels2))
+        self.bns.append(GraphNorm(hidden_channels2))
         self.convs = nn.ModuleList()
         self.jk = jk
         self.conv1 = GLASSConv(in_channels=input_channels, out_channels=hidden_channels1, activation=activation,
                                **kwargs)
-        self.conv2 = GLASSConv(in_channels=hidden_channels1, out_channels=hidden_channels2, activation=activation,
+        # self.conv2 = GLASSConv(in_channels=hidden_channels1, out_channels=hidden_channels2, activation=activation,
+        #                        **kwargs)
+        # self.conv3 = GLASSConv(in_channels=input_channels, out_channels=hidden_channels2, activation=activation,
+        #                        **kwargs)
+        # self.conv4 = GLASSConv(in_channels=input_channels, out_channels=hidden_channels2, activation=activation,
+        #                        **kwargs)
+        self.conv5 = GLASSConv(in_channels=hidden_channels1, out_channels=hidden_channels1, activation=activation,
                                **kwargs)
-        self.conv3 = GLASSConv(in_channels=hidden_channels2, out_channels=hidden_channels2, activation=activation,
+        self.conv6 = GLASSConv(in_channels=hidden_channels1, out_channels=hidden_channels1, activation=activation,
                                **kwargs)
-        self.conv4 = GLASSConv(in_channels=hidden_channels2, out_channels=hidden_channels2, activation=activation,
-                               **kwargs)
+        # self.conv7 = GLASSConv(in_channels=hidden_channels1, out_channels=hidden_channels1, activation=activation,
+        #                        **kwargs)
         self.activation = activation
         self.dropout = dropout
-        self.mlp1 = Linear(hidden_channels1, self.num_clusters1)
-        self.mlp2 = Linear(hidden_channels2, self.num_clusters2)
-        self.mlp3 = Linear(hidden_channels2, self.num_clusters3)
-        self.mlp4 = Linear(hidden_channels2, self.num_clusters4)
+        self.mlp1 = Linear(3 * hidden_channels1, self.num_clusters1)
+        # self.mlp2 = Linear(hidden_channels2, self.num_clusters2)
+        # self.mlp3 = Linear(hidden_channels2, self.num_clusters3)
+        # self.mlp4 = Linear(hidden_channels2, self.num_clusters4)
         self.num_layers = num_layers
-        self.k1 = 70
-        self.k2 = 50
-        self.k3 = 30
-        self.k4 = 20
+        self.k1 = 5
+        self.k2 = 20
+        self.k3 = 20
+        self.k4 = 15
         self.global_sort1 = aggr.SortAggregation(k=self.k1)
-        self.global_sort2 = aggr.SortAggregation(k=self.k2)
-        self.global_sort3 = aggr.SortAggregation(k=self.k3)
-        self.global_sort4 = aggr.SortAggregation(k=self.k4)
-        self.lin1 = Linear(170, 32)
-        self.lin2 = Linear(32, 170)
+        # self.global_sort2 = aggr.SortAggregation(k=self.k2)
+        # self.global_sort3 = aggr.SortAggregation(k=self.k3)
+        # self.global_sort4 = aggr.SortAggregation(k=self.k4)
+        # self.lin1 = Linear(5 * 3 * hidden_channels1, 100)
+        # self.lin2 = Linear(100, 5 * 3 * hidden_channels1)
+        # self.lin3 = Linear(32, 20)
+        # self.lin4 = Linear(20, 32)
 
-        self.preds = torch.nn.ModuleList([MLP(input_channels=(self.k1 + self.k2 + self.k3 + self.k4),
-                                              hidden_channels=2 * hidden_channels2, output_channels=output_channels,
+        self.preds = torch.nn.ModuleList([MLP(input_channels=5 * 3 * hidden_channels1 + 5,
+                                              hidden_channels=hidden_channels2, output_channels=output_channels,
                                               num_layers=4, dropout=0.5)])
 
         self.reset_parameters()
+        self._weights_init(self.mlp1)
+        # self._weights_init(self.mlp2)
+        # self._weights_init(self.mlp3)
+        # self._weights_init(self.mlp4)
+        # self._weights_init(self.lin1)
+        # self._weights_init(self.lin2)
+        # self._weights_init(self.lin3)
+        # self._weights_init(self.lin4)
+
+    def _weights_init(self, lin_layer):
+        torch.nn.init.xavier_uniform_(lin_layer.weight.data)
+        if lin_layer.bias is not None:
+            lin_layer.bias.data.fill_(0.0)
 
     def reset_parameters(self):
         self.input_emb.reset_parameters()
         self.emb_gn.reset_parameters()
         # for conv in self.convs:
         self.conv1.reset_parameters()
-        self.conv2.reset_parameters()
-        self.conv3.reset_parameters()
-        self.conv4.reset_parameters()
+        self.conv5.reset_parameters()
+        self.conv6.reset_parameters()
+        # self.conv2.reset_parameters()
+        # self.conv3.reset_parameters()
+        # self.conv4.reset_parameters()
         # if not (self.gns is None):
         #     for gn in self.gns:
         #         gn.reset_parameters()
@@ -435,11 +469,29 @@ class SpectralNet(torch.nn.Module):
         x1 = self.input_emb(x).reshape(x.shape[0], -1)
         x1 = F.normalize(x1, p=1, dim=1)
         x1 = self.emb_gn(x1)
+        xs = []
         # x = self.convs[-1](x, edge_index, edge_weight)
         # x = self.activation(x)
         x = self.conv1(x1, edge_index, edge_weight)
         x = self.activation(x)
         x = self.bns[0](x)
+        xs.append(x)
+        x = self.conv5(x, edge_index, edge_weight)
+        x = self.activation(x)
+        x = self.bns[3](x)
+        xs.append(x)
+        x = self.conv6(x, edge_index, edge_weight)
+        xs.append(x)
+        # x = self.activation(x)
+        # x = self.bns[4](x)
+        # x = self.conv7(x, edge_index, edge_weight)
+        # x = self.activation(x)
+        # x = self.bns[5](x)
+        # #
+        # x = self.lin3(x)
+        # x = self.lin4(x)
+
+        x = torch.cat(xs, dim=-1)
 
         # Cluster assignments (logits)
         s = self.mlp1(x)
@@ -450,90 +502,111 @@ class SpectralNet(torch.nn.Module):
                                            dim=1) @ l
         adj = utils.to_dense_adj(edge_index, edge_attr=edge_weight, max_num_nodes=x.shape[0])
         out, out_adj, mc_loss1, o_loss1 = dense_mincut_pool(x, adj, s)
-        out = out.reshape(self.num_clusters1, self.hidden_channels1)
+        out = out.reshape(self.num_clusters1, self.hidden_channels1 * 3)
 
         embs = []
-        for idx, subgraph in enumerate(pos):
+        # for idx, subgraph in enumerate(pos):
+        #     r = subgraph_to_cluster1[:, idx]
+        #     # r = r.sort(descending=True)[0]
+        #     x = torch.cat([out, r.reshape(self.num_clusters1, 1)], dim=-1)
+        #     x = self.global_sort1(x)
+        #     x = x.reshape(self.k1 * (self.hidden_channels1 + 1))
+        #     embs.append(x)
+        for idx, row in enumerate(subgraph_assignment):
+            node_emb = row.reshape(x.shape[0], 1) * x
             r = subgraph_to_cluster1[:, idx]
-            r = r.sort(descending=True)[0]
-            embs.append(r[:self.k1])
+            cluster_emb = torch.transpose(torch.softmax(s, dim=-1), 0, 1) @ node_emb
+            cluster_emb = torch.cat([cluster_emb, r.reshape(self.num_clusters1, 1)], dim=-1)
+            cluster_emb = self.global_sort1(cluster_emb)
+            embs.append(cluster_emb.reshape(self.k1 * self.hidden_channels1 * 3 + self.k1))
         emb1 = torch.stack(embs, dim=0)
 
-        new_adj = out_adj.reshape(self.num_clusters1, self.num_clusters1)
-        updated_edge_index = new_adj.nonzero().t().contiguous()
-        all_edge_weights = torch.flatten(new_adj)
-        updated_edge_weight = all_edge_weights[torch.nonzero(all_edge_weights)].reshape(updated_edge_index[0].shape, )
-        x = self.conv2(out, updated_edge_index, updated_edge_weight.detach())
-        x = self.activation(x)
-        x = self.bns[1](x)
+        # new_adj = out_adj.reshape(self.num_clusters1, self.num_clusters1)
+        # updated_edge_index = new_adj.nonzero().t().contiguous()
+        # all_edge_weights = torch.flatten(new_adj)
+        # updated_edge_weight = all_edge_weights[torch.nonzero(all_edge_weights)].reshape(updated_edge_index[0].shape, )
+        # x = self.conv2(out, updated_edge_index, updated_edge_weight.detach())
+        # # x = self.conv2(x1, edge_index, edge_weight)
+        # x = self.activation(x)
+        # x = self.bns[1](x)
+        # #
+        # # Cluster assignments (logits)
+        # s = self.mlp2(x)
+        # ent_loss2 = (-torch.softmax(s, dim=-1) * torch.log(torch.softmax(s, dim=-1) + 1e-15)).sum(dim=-1).mean()
+        # subgraph_to_cluster2 = F.normalize(torch.transpose(torch.softmax(s, dim=-1), 0, 1), p=1,
+        #                                    dim=1) @ subgraph_to_cluster1
+        # adj = utils.to_dense_adj(updated_edge_index, edge_attr=updated_edge_weight, max_num_nodes=x.shape[0])
+        # out, out_adj, mc_loss2, o_loss2 = dense_mincut_pool(x, adj, s)
+        # out = out.reshape(self.num_clusters2, self.hidden_channels2)
+        #
+        # embs = []
+        # for idx, subgraph in enumerate(pos):
+        #     r = subgraph_to_cluster2[:, idx]
+        #     # r = r.sort(descending=True)[0]
+        #     x = torch.cat([out, r.reshape(self.num_clusters2, 1)], dim=-1)
+        #     x = self.global_sort2(x)
+        #     x = x.reshape(self.k2 * (self.hidden_channels1 + 1))
+        #     embs.append(x)
+        # emb2 = torch.stack(embs, dim=0)
+        #
+        # new_adj = out_adj.reshape(self.num_clusters2, self.num_clusters2)
+        # updated_edge_index = new_adj.nonzero().t().contiguous()
+        # all_edge_weights = torch.flatten(new_adj)
+        # updated_edge_weight = all_edge_weights[torch.nonzero(all_edge_weights)].reshape(updated_edge_index[0].shape, )
+        # # x = self.conv3(out, updated_edge_index, updated_edge_weight.detach())
+        # x = self.conv3(x1, edge_index, edge_weight)
+        # x = self.activation(x)
+        # x = self.bns[2](x)
+        #
+        # # Cluster assignments (logits)
+        # s = self.mlp3(x)
+        # ent_loss3 = (-torch.softmax(s, dim=-1) * torch.log(torch.softmax(s, dim=-1) + 1e-15)).sum(dim=-1).mean()
+        # subgraph_to_cluster3 = F.normalize(torch.transpose(torch.softmax(s, dim=-1), 0, 1), p=1,
+        #                                    dim=1) @ l
+        # # adj = utils.to_dense_adj(updated_edge_index, edge_attr=updated_edge_weight, max_num_nodes=x.shape[0])
+        # out, out_adj, mc_loss3, o_loss3 = dense_mincut_pool(x, adj, s)
+        # out = out.reshape(self.num_clusters3, self.hidden_channels2)
+        #
+        # embs = []
+        # for idx, subgraph in enumerate(pos):
+        #     r = subgraph_to_cluster3[:, idx]
+        #     # r = r.sort(descending=True)[0]
+        #     # x = torch.cat([out, r.reshape(self.num_clusters3, 1)], dim=-1)
+        #     # x = self.global_sort3(x)
+        #     # x = x.reshape(self.k3 * (self.hidden_channels1 + 1))
+        #     embs.append(r)
+        # emb3 = torch.stack(embs, dim=0)
+        # # emb3 = emb.reshape(len(pos), self.k3 * (self.hidden_channels2 + 1))
+        #
+        # new_adj = out_adj.reshape(self.num_clusters3, self.num_clusters3)
+        # updated_edge_index = new_adj.nonzero().t().contiguous()
+        # all_edge_weights = torch.flatten(new_adj)
+        # updated_edge_weight = all_edge_weights[torch.nonzero(all_edge_weights)].reshape(updated_edge_index[0].shape, )
+        # # x = self.conv4(out, updated_edge_index, updated_edge_weight.detach())
+        # x = self.conv4(x1, edge_index, edge_weight)
+        # # Cluster assignments (logits)
+        # s = self.mlp4(x)
+        # ent_loss4 = (-torch.softmax(s, dim=-1) * torch.log(torch.softmax(s, dim=-1) + 1e-15)).sum(dim=-1).mean()
+        # subgraph_to_cluster4 = F.normalize(torch.transpose(torch.softmax(s, dim=-1), 0, 1), p=1,
+        #                                    dim=1) @ l
+        # # adj = utils.to_dense_adj(updated_edge_index, edge_attr=updated_edge_weight)
+        # out, out_adj, mc_loss4, o_loss4 = dense_mincut_pool(x, adj, s)
+        # out = out.reshape(self.num_clusters4, self.hidden_channels2)
+        # embs = []
+        # for idx, subgraph in enumerate(pos):
+        #     r = subgraph_to_cluster4[:, idx]
+        #     # r = r.sort(descending=True)[0]
+        #     # x = torch.cat([out, r.reshape(self.num_clusters4, 1)], dim=-1)
+        #     # x = self.global_sort4(x)
+        #     # x = x.reshape(self.k4 * (self.hidden_channels1 + 1))
+        #     embs.append(r)
+        # emb4 = torch.stack(embs, dim=0)
 
-        # Cluster assignments (logits)
-        s = self.mlp2(x)
-        ent_loss2 = (-torch.softmax(s, dim=-1) * torch.log(torch.softmax(s, dim=-1) + 1e-15)).sum(dim=-1).mean()
-        subgraph_to_cluster2 = F.normalize(torch.transpose(torch.softmax(s, dim=-1), 0, 1), p=1,
-                                           dim=1) @ subgraph_to_cluster1
-        adj = utils.to_dense_adj(updated_edge_index, edge_attr=updated_edge_weight, max_num_nodes=x.shape[0])
-        out, out_adj, mc_loss2, o_loss2 = dense_mincut_pool(x, adj, s)
-        out = out.reshape(self.num_clusters2, self.hidden_channels2)
+        final_emb = torch.cat([emb1], dim=-1)
+        # final_emb = self.lin1(final_emb)
+        # final_emb = self.lin2(final_emb)
 
-        embs = []
-        for idx, subgraph in enumerate(pos):
-            r = subgraph_to_cluster2[:, idx]
-            r = r.sort(descending=True)[0]
-            embs.append(r[:self.k2])
-        emb2 = torch.stack(embs, dim=0)
-
-        new_adj = out_adj.reshape(self.num_clusters2, self.num_clusters2)
-        updated_edge_index = new_adj.nonzero().t().contiguous()
-        all_edge_weights = torch.flatten(new_adj)
-        updated_edge_weight = all_edge_weights[torch.nonzero(all_edge_weights)].reshape(updated_edge_index[0].shape, )
-        x = self.conv3(out, updated_edge_index, updated_edge_weight.detach())
-        x = self.activation(x)
-        x = self.bns[2](x)
-
-        # Cluster assignments (logits)
-        s = self.mlp3(x)
-        ent_loss3 = (-torch.softmax(s, dim=-1) * torch.log(torch.softmax(s, dim=-1) + 1e-15)).sum(dim=-1).mean()
-        subgraph_to_cluster3 = F.normalize(torch.transpose(torch.softmax(s, dim=-1), 0, 1), p=1,
-                                           dim=1) @ subgraph_to_cluster2
-        adj = utils.to_dense_adj(updated_edge_index, edge_attr=updated_edge_weight, max_num_nodes=x.shape[0])
-        out, out_adj, mc_loss3, o_loss3 = dense_mincut_pool(x, adj, s)
-        out = out.reshape(self.num_clusters3, self.hidden_channels2)
-
-        embs = []
-        for idx, subgraph in enumerate(pos):
-            r = subgraph_to_cluster3[:, idx]
-            r = r.sort(descending=True)[0]
-            embs.append(r[:self.k3])
-        emb3 = torch.stack(embs, dim=0)
-        # emb3 = emb.reshape(len(pos), self.k3 * (self.hidden_channels2 + 1))
-
-        new_adj = out_adj.reshape(self.num_clusters3, self.num_clusters3)
-        updated_edge_index = new_adj.nonzero().t().contiguous()
-        all_edge_weights = torch.flatten(new_adj)
-        updated_edge_weight = all_edge_weights[torch.nonzero(all_edge_weights)].reshape(updated_edge_index[0].shape, )
-        x = self.conv4(out, updated_edge_index, updated_edge_weight.detach())
-
-        # Cluster assignments (logits)
-        s = self.mlp4(x)
-        ent_loss4 = (-torch.softmax(s, dim=-1) * torch.log(torch.softmax(s, dim=-1) + 1e-15)).sum(dim=-1).mean()
-        subgraph_to_cluster4 = F.normalize(torch.transpose(torch.softmax(s, dim=-1), 0, 1), p=1,
-                                           dim=1) @ subgraph_to_cluster3
-        adj = utils.to_dense_adj(updated_edge_index, edge_attr=updated_edge_weight)
-        out, out_adj, mc_loss4, o_loss4 = dense_mincut_pool(x, adj, s)
-        out = out.reshape(self.num_clusters4, self.hidden_channels2)
-        embs = []
-        for idx, subgraph in enumerate(pos):
-            r = subgraph_to_cluster4[:, idx]
-            r = r.sort(descending=True)[0]
-            embs.append(r[:self.k4])
-        emb4 = torch.stack(embs, dim=0)
-
-        final_emb = torch.cat([emb1, emb2, emb3, emb4], dim=-1)
-        final_emb = self.lin1(final_emb)
-        final_emb = self.lin2(final_emb)
-
-        return self.preds[0](final_emb), mc_loss1 + mc_loss2 + mc_loss3 + mc_loss4, o_loss1 + o_loss2 + o_loss3 + o_loss4, 0, ent_loss1 + ent_loss2 + ent_loss3 + ent_loss4
+        return self.preds[0](final_emb), mc_loss1, o_loss1, 0, ent_loss1
 
 
 class MyGCNConv(torch.nn.Module):
