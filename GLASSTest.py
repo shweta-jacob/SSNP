@@ -36,8 +36,8 @@ args = parser.parse_args()
 config.set_device(args.device)
 
 
-def set_seed(seed: int, f):
-    print("seed ", seed, file=f)
+def set_seed(seed: int):
+    print("seed ", seed)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -46,72 +46,12 @@ def set_seed(seed: int, f):
 
 
 if args.use_seed:
-    f = open('output.log', 'w')
-    set_seed(0, f)
+    set_seed(0)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.enabled = False
 
 baseG = datasets.load_dataset(args.dataset)
-# baseG = graph9.load_dataset()
-
-# final_pos = []
-# finalY = []
-# final_mask = []
-# j = 0
-# i = 0
-# for idx, pos in enumerate(baseG.pos[0:1121]):
-#     if baseG.y[idx] == 0:
-#         final_pos.append(pos)
-#         finalY.append(baseG.y[idx])
-#         final_mask.append(baseG.mask[idx])
-#         i += 1
-#     if baseG.y[idx] == 1:
-#         final_pos.append(pos)
-#         finalY.append(baseG.y[idx])
-#         final_mask.append(baseG.mask[idx])
-#         j += 1
-#     if i >= 2 and j >= 2:
-#         break
-# j = 0
-# i = 0
-# val_pos = baseG.pos[1272:1431]
-# val_mask = baseG.mask[1272:1431]
-# val_y = baseG.y[1272:1431]
-# for idx, pos in enumerate(val_pos):
-#     if val_y[idx] == 0:
-#         final_pos.append(pos)
-#         finalY.append(val_y[idx])
-#         final_mask.append(val_mask[idx])
-#         i += 1
-#     if val_y[idx] == 1:
-#         final_pos.append(pos)
-#         finalY.append(val_y[idx])
-#         final_mask.append(val_mask[idx])
-#         j += 1
-#     if i >= 2 and j >= 2:
-#         break
-# j = 0
-# i = 0
-# test_pos = baseG.pos[1432:]
-# test_mask = baseG.mask[1432:]
-# test_y = baseG.y[1432:]
-# for idx, pos in enumerate(test_pos):
-#     if test_y[idx] == 0:
-#         final_pos.append(pos)
-#         finalY.append(test_y[idx])
-#         final_mask.append(test_mask[idx])
-#         i += 1
-#     if test_y[idx] == 1:
-#         final_pos.append(pos)
-#         finalY.append(test_y[idx])
-#         final_mask.append(test_mask[idx])
-#         j += 1
-#     if i >= 2 and j >= 2:
-#         break
-# baseG.pos = torch.stack(final_pos)
-# baseG.y = torch.Tensor(finalY)
-# baseG.mask = torch.Tensor(final_mask)
 
 trn_dataset, val_dataset, tst_dataset = None, None, None
 train_subgraph_assignment, val_subgraph_assignment, test_subgraph_assignment = None, None, None
@@ -206,7 +146,7 @@ def split():
             return SubGDataset.GDataloader(ds, sa, bs, shuffle=True)
 
 
-def buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_ratio, aggr):
+def buildModel(hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_ratio, aggr):
     '''
     Build a GLASS model.
     Args:
@@ -240,8 +180,7 @@ def buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_rat
     return gnn
 
 
-def test(f,
-         pool="size",
+def test(pool="size",
          aggr="mean",
          hidden_dim1=64,
          hidden_dim2=64,
@@ -269,9 +208,9 @@ def test(f,
 
     outs = []
     for repeat in range(args.repeat):
-        set_seed((1 << repeat) - 1, f)
-        print(f"repeat {repeat}", file=f)
-        gnn = buildModel(f, hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_ratio,
+        set_seed((1 << repeat) - 1)
+        print(f"repeat {repeat}")
+        gnn = buildModel(hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_ratio,
                          aggr)
         split()
         trn_loader = loader_fn(trn_dataset, train_subgraph_assignment, batch_size)
@@ -309,7 +248,7 @@ def test(f,
             # scd.step(loss)
 
             if i >= 100/num_div:
-                score, val_loss = train.test(f,gnn,
+                score, val_loss = train.test(gnn,
                                       val_loader,
                                       score_fn,
                                       loss_fn=loss_fn)
@@ -317,7 +256,7 @@ def test(f,
                 if score > val_score:
                     early_stop = 0
                     val_score = score
-                    score, tst_loss = train.test(f,gnn,
+                    score, tst_loss = train.test(gnn,
                                           tst_loader,
                                           score_fn,
                                           loss_fn=loss_fn)
@@ -328,9 +267,9 @@ def test(f,
                     epochs.append(i+1)
                     print(
                         f"iter {i + 1} loss {loss:.4f} train {train_score:.4f} val {val_score:.4f} tst {tst_score:.4f}",
-                        flush=True, file=f)
+                        flush=True)
                 elif score >= val_score - 1e-5:
-                    score, tst_loss = train.test(f,gnn,
+                    score, tst_loss = train.test(gnn,
                                           tst_loader,
                                           score_fn,
                                           loss_fn=loss_fn)
@@ -341,16 +280,16 @@ def test(f,
                     epochs.append(i+1)
                     print(
                         f"iter {i + 1} loss {loss:.4f} train {train_score:.4f} val {val_score:.4f} tst {score:.4f}",
-                        flush=True, file=f)
+                        flush=True)
                 else:
                     early_stop += 1
-                    tst_score, tst_loss = train.test(f, gnn,
+                    tst_score, tst_loss = train.test(gnn,
                                           tst_loader,
                                           score_fn,
                                           loss_fn=loss_fn)
                     print(
-                            f"iter {i + 1} loss {loss:.4f} train {train_score:.4f} val {score:.4f} tst {train.test(f, gnn, tst_loader, score_fn, loss_fn=loss_fn)[0]:.4f}",
-                            flush=True, file=f)
+                            f"iter {i + 1} loss {loss:.4f} train {train_score:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn)[0]:.4f}",
+                            flush=True)
                     val_scores.append(val_loss)
                     tst_scores.append(tst_loss)
                     train_scores.append(loss)
@@ -361,7 +300,7 @@ def test(f,
             #     break
         print(
             f"end: epoch {i + 1}, train time {sum(trn_time):.2f} s, train {train_score:.4f} val {val_score:.3f}, tst {tst_score:.3f}",
-            flush=True, file=f)
+            flush=True)
         outs.append(tst_score)
         figure(figsize=(8, 6))
         # plt.xlim([1, 200])
@@ -374,17 +313,15 @@ def test(f,
         plt.legend(['Train', 'Validation', 'Test'])
         plt.show()
     print(
-        f"average {np.average(outs):.3f} error {np.std(outs) / np.sqrt(len(outs)):.3f}", file=f
+        f"average {np.average(outs):.3f} error {np.std(outs) / np.sqrt(len(outs)):.3f}"
     )
 
 
-with open('output.log', 'w') as out_file:
-    print(args, file=out_file)
-    # read configuration
-    with open(f"config/{args.dataset}.yml") as f:
-        params = yaml.safe_load(f)
+print(args)
+# read configuration
+with open(f"config/{args.dataset}.yml") as f:
+    params = yaml.safe_load(f)
 
-    print("params", params, flush=True, file=out_file)
-    split()
-    test(out_file, **params)
-f.close()
+print("params", params, flush=True)
+split()
+test(**params)

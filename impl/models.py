@@ -499,7 +499,6 @@ class SpectralNet(torch.nn.Module):
         # Cluster assignments (logits)
         s = self.mlp1(x)
         ent_loss1 = (-torch.softmax(s, dim=-1) * torch.log(torch.softmax(s, dim=-1) + 1e-15)).sum(dim=-1).mean()
-        print(f"Entropy loss: {ent_loss1}")
         l = torch.transpose(subgraph_assignment, 0, 1)
         subgraph_to_cluster1 = torch.transpose(torch.softmax(s, dim=-1), 0, 1) @ l
         adj = utils.to_dense_adj(edge_index, edge_attr=edge_weight, max_num_nodes=x.shape[0])

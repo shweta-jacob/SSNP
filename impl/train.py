@@ -35,7 +35,7 @@ def train(optimizer, model, dataloader, metrics, loss_fn, prev_classification_lo
 
 
 @torch.no_grad()
-def test(f, model, dataloader, metrics, loss_fn):
+def test(model, dataloader, metrics, loss_fn):
     '''
     Test models either on validation dataset or test dataset.
     '''
