@@ -39,13 +39,14 @@ class GDataloader(DataLoader):
     '''
     Dataloader for GDataset
     '''
-    def __init__(self, Gdataset, batch_size=64, shuffle=True, drop_last=False):
+    def __init__(self, Gdataset, subgraph_assignment, batch_size=64, shuffle=True, drop_last=False):
         super(GDataloader,
               self).__init__(torch.arange(len(Gdataset)).to(Gdataset.x.device),
                              batch_size=batch_size,
                              shuffle=shuffle,
                              drop_last=drop_last)
         self.Gdataset = Gdataset
+        self.subgraph_assignment = subgraph_assignment
 
     def get_x(self):
         return self.Gdataset.x
@@ -59,6 +60,9 @@ class GDataloader(DataLoader):
     def get_pos(self):
         return self.Gdataset.pos
 
+    def get_subgraph_assignment(self):
+        return self.subgraph_assignment
+
     def get_y(self):
         return self.Gdataset.y
 
@@ -69,7 +73,7 @@ class GDataloader(DataLoader):
     def __next__(self):
         perm = next(self.iter)
         return self.get_x(), self.get_ei(), self.get_ea(), self.get_pos(
-        )[perm], self.get_y()[perm]
+        )[perm], self.get_subgraph_assignment()[perm], self.get_y()[perm]
 
 
 class ZGDataloader(GDataloader):
