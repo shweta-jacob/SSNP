@@ -108,6 +108,7 @@ def split():
     train_subgraph_assignment = torch.zeros((trn_dataset.pos.shape[0], trn_dataset.x.shape[0])).to(config.device)
     val_subgraph_assignment = torch.zeros((val_dataset.pos.shape[0], val_dataset.x.shape[0])).to(config.device)
     test_subgraph_assignment = torch.zeros((tst_dataset.pos.shape[0], tst_dataset.x.shape[0])).to(config.device)
+    # a[torch.arange(a.size(0)).unsqueeze(1), index] = 1
     for idx, pos in enumerate(trn_dataset.pos):
         for node in pos:
             if node != -1:

@@ -396,6 +396,7 @@ class SpectralNet(torch.nn.Module):
         self.bns.append(GraphNorm(hidden_channels2))
         self.bns.append(GraphNorm(hidden_channels2))
         self.bns.append(GraphNorm(hidden_channels2))
+        self.gn2 = GraphNorm(200)
         self.gn = GraphNorm(3 * hidden_channels1)
         self.convs = nn.ModuleList()
         self.jk = jk
@@ -428,12 +429,12 @@ class SpectralNet(torch.nn.Module):
         # self.global_sort2 = aggr.SortAggregation(k=self.k2)
         # self.global_sort3 = aggr.SortAggregation(k=self.k3)
         # self.global_sort4 = aggr.SortAggregation(k=self.k4)
-        # self.lin1 = Linear(8 * 3 * hidden_channels1, 100)
-        # self.lin2 = Linear(100, 8 * 3 * hidden_channels1)
+        self.lin1 = Linear(self.k1 * 3 * hidden_channels1, 100)
+        self.lin2 = Linear(self.k1 * 3 * hidden_channels1, 100)
         # self.lin3 = Linear(32, 20)
         # self.lin4 = Linear(20, 32)
 
-        self.preds = torch.nn.ModuleList([MLP(input_channels=self.k1 * 3 * hidden_channels1,
+        self.preds = torch.nn.ModuleList([MLP(input_channels=200,
                                               hidden_channels=hidden_channels2, output_channels=output_channels,
                                               num_layers=4, dropout=0.5)])
 
@@ -505,7 +506,8 @@ class SpectralNet(torch.nn.Module):
         out, out_adj, mc_loss1, o_loss1 = dense_mincut_pool(x, adj, s)
         out = out.reshape(self.num_clusters1, self.hidden_channels1 * 3)
 
-        embs = []
+        node_embs = []
+        comp_embs = []
         # for idx, subgraph in enumerate(pos):
         #     r = subgraph_to_cluster1[:, idx]
         #     # r = r.sort(descending=True)[0]
@@ -519,8 +521,18 @@ class SpectralNet(torch.nn.Module):
             cluster_emb = torch.transpose(torch.softmax(s, dim=-1), 0, 1) @ node_emb
             # cluster_emb = torch.cat([cluster_emb, r.reshape(self.num_clusters1, 1)], dim=-1)
             # cluster_emb = self.global_sort1(cluster_emb)
-            embs.append(cluster_emb.reshape(self.k1 * self.hidden_channels1 * 3))
-        emb1 = torch.stack(embs, dim=0)
+            node_embs.append(cluster_emb.reshape(self.k1 * self.hidden_channels1 * 3))
+            comp_emb = out - cluster_emb
+            comp_embs.append(comp_emb.reshape(self.k1 * self.hidden_channels1 * 3))
+        emb1 = torch.stack(node_embs, dim=0)
+        emb2 = torch.stack(comp_embs, dim=0)
+        emb1 = self.lin1(emb1)
+        emb2 = self.lin2(emb2)
+        mask = (torch.zeros(
+            len(pos), device=x.device) < 0.5).reshape(-1, 1)
+        z_ratio = 0.75
+        x = torch.where(mask, z_ratio * emb1 + (1 - z_ratio) * emb2,
+                        z_ratio * emb2 + (1 - z_ratio) * emb1)
 
         # new_adj = out_adj.reshape(self.num_clusters1, self.num_clusters1)
         # updated_edge_index = new_adj.nonzero().t().contiguous()
@@ -603,7 +615,8 @@ class SpectralNet(torch.nn.Module):
         #     embs.append(r)
         # emb4 = torch.stack(embs, dim=0)
 
-        final_emb = torch.cat([emb1], dim=-1)
+        final_emb = torch.cat([emb1, emb2], dim=-1)
+        final_emb = self.gn2(final_emb)
         # final_emb = self.lin1(final_emb)
         # final_emb = self.lin2(final_emb)
 
