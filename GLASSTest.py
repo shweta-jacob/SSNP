@@ -158,8 +158,8 @@ def buildModel(hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_ratio,
         aggr: aggregation method. mean, sum, or gcn. 
     '''
     input_channels = hidden_dim1
-    if args.use_nodeid:
-        input_channels = 64
+    # if args.use_nodeid:
+    #     input_channels = 64
 
     average_nodes = int(trn_dataset.x.size(0))
     print(f"Average number of nodes in graph: {average_nodes}")
@@ -172,12 +172,12 @@ def buildModel(hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_ratio,
                       activation=nn.ELU(inplace=True),
                       jk=jk).to(config.device)
 
-    if args.use_nodeid:
-        print("load ", f"./Emb/{args.dataset}_64.pt")
-        emb = torch.load(f"./Emb/{args.dataset}_64.pt",
-                         map_location=torch.device('cpu')).detach()
-        gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
-        gnn.input_emb.to(config.device)
+    # if args.use_nodeid:
+    #     print("load ", f"./Emb/{args.dataset}_64.pt")
+    #     emb = torch.load(f"./Emb/{args.dataset}_64.pt",
+    #                      map_location=torch.device('cpu')).detach()
+    #     gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
+    #     gnn.input_emb.to(config.device)
     return gnn
 
 
@@ -231,24 +231,14 @@ def test(pool="size",
         train_score = 0
         early_stop = 0
         trn_time = []
-        training_losses = []
         epochs = []
-        prev_classification_loss = 0
-        prev_clustering_loss = 0
-        for i in range(300):
+        for i in range(100):
             t1 = time.time()
-            train_score, loss, classification_loss, clustering_loss = train.train(optimizer, gnn, trn_loader,
-                                                                                  score_fn, loss_fn,
-                                                                     prev_classification_loss, prev_clustering_loss)
-            prev_classification_loss = classification_loss
-            prev_clustering_loss = clustering_loss
+            train_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn)
             trn_time.append(time.time() - t1)
-            # if i % 10 == 0:
-            #     training_losses.append(loss.detach().numpy())
-            #     epochs.append(i)
             # scd.step(loss)
 
-            if i >= 100/num_div:
+            if i >= 1:
                 score, val_loss = train.test(gnn,
                                       val_loader,
                                       score_fn,
@@ -297,7 +287,7 @@ def test(pool="size",
                     epochs.append(i+1)
             if val_score >= 1 - 1e-5:
                 early_stop += 1
-            # if early_stop > 50:
+            # if early_stop > 100/num_div:
             #     break
         print(
             f"end: epoch {i + 1}, train time {sum(trn_time):.2f} s, train {train_score:.4f} val {val_score:.3f}, tst {tst_score:.3f}",
