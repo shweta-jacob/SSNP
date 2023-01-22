@@ -1,6 +1,7 @@
 import pandas as pd
 import torch
 import seaborn as sns
+from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
 
@@ -22,8 +23,8 @@ def plot_cont_labels(embs, y):
     import matplotlib.pyplot as plt
     import numpy as np
 
-    x1 = torch.index_select(embs, 1, torch.tensor([0]))
-    x2 = torch.index_select(embs, 1, torch.tensor([1]))
+    x1 = torch.index_select(torch.tensor(embs), 1, torch.tensor([0]))
+    x2 = torch.index_select(torch.tensor(embs), 1, torch.tensor([1]))
     label = y
     colors = ['red', 'green', 'blue', 'purple', 'yellow', 'orange']
 
@@ -66,8 +67,11 @@ def train(optimizer, model, dataloader, metrics, loss_fn):
     embs = torch.cat(embs, dim=0)
     init_embs = torch.cat(init_embs, dim=0)
     # plot_emb_lookup(init_embs, y)
-    plot_emb_lookup(embs, y)
-    plot_cont_labels(embs, y)
+    # plot_emb_lookup(embs, y)
+    # pca = PCA(n_components=2, svd_solver='full')
+    # init_embs = pca.fit_transform(init_embs.detach().numpy())
+    # plot_cont_labels(init_embs, y)
+    plot_cont_labels(embs.detach().numpy(), y)
     return metrics(pred.detach().cpu().numpy(), y.cpu().numpy()), sum(total_loss) / len(
         total_loss)
 
