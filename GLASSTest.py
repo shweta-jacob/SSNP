@@ -222,7 +222,7 @@ def test(pool="size",
         scd = lr_scheduler.ReduceLROnPlateau(optimizer,
                                              factor=resi,
                                              min_lr=5e-5,
-                                             patience=100)
+                                             patience=10)
         val_score = 0
         train_scores = []
         val_scores = []
@@ -236,7 +236,7 @@ def test(pool="size",
             t1 = time.time()
             train_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn)
             trn_time.append(time.time() - t1)
-            # scd.step(loss)
+            scd.step(loss)
 
             if i >= 1:
                 score, val_loss = train.test(gnn,

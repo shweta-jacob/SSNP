@@ -371,24 +371,17 @@ class SpectralNet(torch.nn.Module):
         self.gn = GraphNorm(hidden_channels1)
         self.convs = nn.ModuleList()
         self.jk = jk
-        self.conv1 = GLASSConv(in_channels=input_channels, out_channels=hidden_channels1)
-        self.conv2 = GCNConv(in_channels=hidden_channels1, out_channels=hidden_channels1)
         self.convs.append(
             conv(in_channels=input_channels,
                  out_channels=hidden_channels1,
                  activation=activation,
                  **kwargs))
-        for _ in range(num_layers - 2):
+        for _ in range(num_layers - 1):
             self.convs.append(
                 conv(in_channels=hidden_channels1,
                      out_channels=hidden_channels1,
                      activation=activation,
                      **kwargs))
-        self.convs.append(
-            conv(in_channels=hidden_channels1,
-                 out_channels=hidden_channels1,
-                 activation=activation,
-                 **kwargs))
         self.activation = activation
         self.dropout = dropout
         if gn:
@@ -425,7 +418,11 @@ class SpectralNet(torch.nn.Module):
     def reset_parameters(self):
         self.input_emb.reset_parameters()
         self.emb_gn.reset_parameters()
-        self.conv1.reset_parameters()
+        for conv in self.convs:
+            conv.reset_parameters()
+        if not (self.gns is None):
+            for gn in self.gns:
+                gn.reset_parameters()
 
     def forward(self, x, edge_index, edge_weight, pos, subgraph_assignment):
         # Propagate node feats
@@ -450,7 +447,7 @@ class SpectralNet(torch.nn.Module):
         xs.append(x)
 
         x = torch.cat(xs, dim=-1)
-        # x = self.gn(x)
+        x = self.gn(x)
 
         # Cluster assignments (logits)
         s = self.mlp1(x)
@@ -472,7 +469,6 @@ class SpectralNet(torch.nn.Module):
             r = subgraph_to_cluster1[:, idx]
             embs.append(r[sorted_cluster_indices])
         emb1 = torch.stack(embs, dim=0)
-        emb1 = self.gn1(emb1)
 
         return self.preds[0](emb1), init_embs, emb1, mc_loss1, o_loss1, ent_loss1
 

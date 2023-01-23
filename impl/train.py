@@ -1,12 +1,15 @@
 import pandas as pd
 import torch
+import warnings
 import seaborn as sns
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
 
+warnings.filterwarnings(action="ignore")
+
 def plot_emb_lookup(x, y):
-    tsne = TSNE(n_components=2, verbose=1, n_iter=250)
+    tsne = TSNE(n_components=2, verbose=0, n_iter=250)
     tsne_results = tsne.fit_transform(x.detach().numpy())
 
     df = pd.DataFrame()
@@ -16,7 +19,7 @@ def plot_emb_lookup(x, y):
 
     sns.scatterplot(x="comp-1", y="comp-2", hue=df.y.tolist(),
                     palette=sns.color_palette("hls", 6),
-                    data=df).set(title="Embedding Lookup T-SNE projection")
+                    data=df).set(title="Contribution label T-SNE projection")
 
 def plot_cont_labels(embs, y):
     import matplotlib
@@ -67,11 +70,11 @@ def train(optimizer, model, dataloader, metrics, loss_fn):
     embs = torch.cat(embs, dim=0)
     init_embs = torch.cat(init_embs, dim=0)
     # plot_emb_lookup(init_embs, y)
-    # plot_emb_lookup(embs, y)
+    plot_emb_lookup(embs, y)
     # pca = PCA(n_components=2, svd_solver='full')
     # init_embs = pca.fit_transform(init_embs.detach().numpy())
     # plot_cont_labels(init_embs, y)
-    # plot_cont_labels(embs.detach().numpy(), y)
+    plot_cont_labels(embs.detach().numpy(), y)
     return metrics(pred.detach().cpu().numpy(), y.cpu().numpy()), sum(total_loss) / len(
         total_loss)
 
