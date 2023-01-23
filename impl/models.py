@@ -130,9 +130,11 @@ class GLASSConv(torch.nn.Module):
                  dropout=0.2):
         super().__init__()
         self.trans_fns = nn.ModuleList([
+            nn.Linear(in_channels, out_channels),
             nn.Linear(in_channels, out_channels)
         ])
         self.comb_fns = nn.ModuleList([
+            nn.Linear(in_channels + out_channels, out_channels),
             nn.Linear(in_channels + out_channels, out_channels)
         ])
         self.adj = torch.sparse_coo_tensor(size=(0, 0))
@@ -142,9 +144,6 @@ class GLASSConv(torch.nn.Module):
         self.z_ratio = z_ratio
         self.reset_parameters()
         self.dropout = dropout
-
-        self._weights_init(self.trans_fns[0])
-        self._weights_init(self.comb_fns[0])
 
     def _weights_init(self, lin_layer):
         torch.nn.init.xavier_uniform_(lin_layer.weight.data)
@@ -158,16 +157,27 @@ class GLASSConv(torch.nn.Module):
             _.reset_parameters()
         self.gn.reset_parameters()
 
-    def forward(self, x_, edge_index, edge_weight):
+    def forward(self, x_, edge_index, edge_weight, mask):
         if self.adj.shape[0] == 0:
             n_node = x_.shape[0]
             self.adj = buildAdj(edge_index, edge_weight, n_node, self.aggr)
-
-        x = self.activation(self.trans_fns[0](x_))
+        # transform node features with different parameters individually.
+        x1 = self.activation(self.trans_fns[1](x_))
+        x0 = self.activation(self.trans_fns[0](x_))
+        # mix transformed feature.
+        x = torch.where(mask, self.z_ratio * x1 + (1 - self.z_ratio) * x0,
+                        self.z_ratio * x0 + (1 - self.z_ratio) * x1)
         # pass messages.
         x = self.adj @ x
         x = self.gn(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
+        x = torch.cat((x, x_), dim=-1)
+        # transform node features with different parameters individually.
+        x1 = self.comb_fns[1](x)
+        x0 = self.comb_fns[0](x)
+        # mix transformed feature.
+        x = torch.where(mask, self.z_ratio * x1 + (1 - self.z_ratio) * x0,
+                        self.z_ratio * x0 + (1 - self.z_ratio) * x1)
         return x
 
 
@@ -345,6 +355,7 @@ class SpectralNet(torch.nn.Module):
                  activation=nn.ReLU(),
                  gn=True,
                  jk=False,
+                 conv=GLASSConv,
                  **kwargs):
         super().__init__()
         self.input_emb = nn.Embedding(max_deg + 1,
@@ -360,19 +371,48 @@ class SpectralNet(torch.nn.Module):
         self.gn = GraphNorm(hidden_channels1)
         self.convs = nn.ModuleList()
         self.jk = jk
-        self.conv1 = GLASSConv(in_channels=input_channels, out_channels=hidden_channels1, activation=activation,
-                               **kwargs)
-        self.conv2 = GLASSConv(in_channels=hidden_channels1, out_channels=hidden_channels1, activation=activation,
-                               **kwargs)
+        self.conv1 = GLASSConv(in_channels=input_channels, out_channels=hidden_channels1)
+        self.conv2 = GCNConv(in_channels=hidden_channels1, out_channels=hidden_channels1)
+        self.convs.append(
+            conv(in_channels=input_channels,
+                 out_channels=hidden_channels1,
+                 activation=activation,
+                 **kwargs))
+        for _ in range(num_layers - 2):
+            self.convs.append(
+                conv(in_channels=hidden_channels1,
+                     out_channels=hidden_channels1,
+                     activation=activation,
+                     **kwargs))
+        self.convs.append(
+            conv(in_channels=hidden_channels1,
+                 out_channels=hidden_channels1,
+                 activation=activation,
+                 **kwargs))
+        self.activation = activation
+        self.dropout = dropout
+        if gn:
+            self.gns = nn.ModuleList()
+            for _ in range(num_layers - 1):
+                self.gns.append(GraphNorm(hidden_channels1))
+            if self.jk:
+                self.gns.append(
+                    GraphNorm(output_channels +
+                              (num_layers - 1) * hidden_channels1))
+            else:
+                self.gns.append(GraphNorm(output_channels))
+        else:
+            self.gns = None
         self.activation = activation
         self.dropout = dropout
         self.mlp1 = Linear(hidden_channels1, self.num_clusters1)
         self.num_layers = num_layers
         self.k1 = 2
+        self.gn1 = GraphNorm(self.k1)
 
         self.preds = torch.nn.ModuleList([MLP(input_channels=self.k1,
                                               hidden_channels=hidden_channels2, output_channels=output_channels,
-                                              num_layers=4, dropout=0.5)])
+                                              num_layers=2, dropout=0.5)])
 
         self.reset_parameters()
         self._weights_init(self.mlp1)
@@ -390,14 +430,23 @@ class SpectralNet(torch.nn.Module):
     def forward(self, x, edge_index, edge_weight, pos, subgraph_assignment):
         # Propagate node feats
         init_embs = []
+        mask = (torch.zeros(
+            (x.shape[0]), device=x.device) < 0.5).reshape(-1, 1)
         x = self.input_emb(x).reshape(x.shape[0], -1)
         x = self.emb_gn(x)
         init_embs.append(x)
         init_embs = torch.stack(init_embs, dim=0).reshape(x.shape[0], -1)
         xs = []
-        x = self.conv1(x, edge_index, edge_weight)
-        x = self.activation(x)
-        x = self.bns[0](x)
+        x = F.dropout(x, p=self.dropout, training=self.training)
+        # pass messages at each layer.
+        for layer, conv in enumerate(self.convs[:-1]):
+            x = conv(x, edge_index, edge_weight, mask)
+            # xs.append(x)
+            if not (self.gns is None):
+                x = self.gns[layer](x)
+            x = self.activation(x)
+            x = F.dropout(x, p=self.dropout, training=self.training)
+        x = self.convs[-1](x, edge_index, edge_weight, mask)
         xs.append(x)
 
         x = torch.cat(xs, dim=-1)
@@ -416,13 +465,14 @@ class SpectralNet(torch.nn.Module):
 
         # should we use out_adj instead here 
         cluster_sizes = torch.sum(s, dim=0)
+        sorted_cluster_indices = cluster_sizes.sort(descending=True)[1]
 
         embs = []
         for idx, subgraph in enumerate(pos):
             r = subgraph_to_cluster1[:, idx]
-            sorted_cluster_indices = cluster_sizes.sort(descending=True)[1]
             embs.append(r[sorted_cluster_indices])
         emb1 = torch.stack(embs, dim=0)
+        emb1 = self.gn1(emb1)
 
         return self.preds[0](emb1), init_embs, emb1, mc_loss1, o_loss1, ent_loss1
 

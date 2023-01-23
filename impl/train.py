@@ -71,7 +71,7 @@ def train(optimizer, model, dataloader, metrics, loss_fn):
     # pca = PCA(n_components=2, svd_solver='full')
     # init_embs = pca.fit_transform(init_embs.detach().numpy())
     # plot_cont_labels(init_embs, y)
-    plot_cont_labels(embs.detach().numpy(), y)
+    # plot_cont_labels(embs.detach().numpy(), y)
     return metrics(pred.detach().cpu().numpy(), y.cpu().numpy()), sum(total_loss) / len(
         total_loss)
 
