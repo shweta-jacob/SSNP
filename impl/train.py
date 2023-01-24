@@ -2,6 +2,7 @@ import pandas as pd
 import torch
 import warnings
 import seaborn as sns
+from matplotlib import pyplot as plt
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
@@ -19,7 +20,8 @@ def plot_emb_lookup(x, y):
 
     sns.scatterplot(x="comp-1", y="comp-2", hue=df.y.tolist(),
                     palette=sns.color_palette("hls", 6),
-                    data=df).set(title="Contribution label T-SNE projection")
+                    data=df).set(title="Embedding T-SNE projection")
+    plt.show()
 
 def plot_cont_labels(embs, y):
     import matplotlib
@@ -68,13 +70,13 @@ def train(optimizer, model, dataloader, metrics, loss_fn):
     pred = torch.cat(preds, dim=0)
     y = torch.cat(ys, dim=0)
     embs = torch.cat(embs, dim=0)
-    init_embs = torch.cat(init_embs, dim=0)
+    # init_embs = torch.cat(init_embs, dim=0)
     # plot_emb_lookup(init_embs, y)
-    plot_emb_lookup(embs, y)
+    # plot_emb_lookup(embs, y)
     # pca = PCA(n_components=2, svd_solver='full')
     # init_embs = pca.fit_transform(init_embs.detach().numpy())
     # plot_cont_labels(init_embs, y)
-    plot_cont_labels(embs.detach().numpy(), y)
+    # plot_cont_labels(embs.detach().numpy(), y)
     return metrics(pred.detach().cpu().numpy(), y.cpu().numpy()), sum(total_loss) / len(
         total_loss)
 

@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn import Linear
+from torch.nn import Linear, Sequential, ReLU
 from torch_geometric import utils
-from torch_geometric.nn import GCNConv, dense_mincut_pool
+from torch_geometric.nn import GCNConv, dense_mincut_pool, global_mean_pool, GINConv
 from torch_geometric.nn.norm import GraphNorm
 
 from .utils import pad2batch
@@ -368,7 +368,7 @@ class SpectralNet(torch.nn.Module):
         self.bns = torch.nn.ModuleList()
         self.bns.append(GraphNorm(hidden_channels1))
         self.bns.append(GraphNorm(hidden_channels1))
-        self.gn = GraphNorm(hidden_channels1)
+        self.gn = GraphNorm(hidden_channels1*3)
         self.convs = nn.ModuleList()
         self.jk = jk
         self.convs.append(
@@ -398,12 +398,13 @@ class SpectralNet(torch.nn.Module):
             self.gns = None
         self.activation = activation
         self.dropout = dropout
-        self.mlp1 = Linear(hidden_channels1, self.num_clusters1)
+        self.mlp1 = Linear(3 * hidden_channels1, self.num_clusters1)
         self.num_layers = num_layers
         self.k1 = 2
-        self.gn1 = GraphNorm(self.k1)
+        self.gn1 = GraphNorm(self.k1 * hidden_channels1)
+        self.lin = Linear(self.k1, hidden_channels1)
 
-        self.preds = torch.nn.ModuleList([MLP(input_channels=self.k1,
+        self.preds = torch.nn.ModuleList([MLP(input_channels=self.k1 * hidden_channels1 * 3,
                                               hidden_channels=hidden_channels2, output_channels=output_channels,
                                               num_layers=2, dropout=0.5)])
 
@@ -438,7 +439,7 @@ class SpectralNet(torch.nn.Module):
         # pass messages at each layer.
         for layer, conv in enumerate(self.convs[:-1]):
             x = conv(x, edge_index, edge_weight, mask)
-            # xs.append(x)
+            xs.append(x)
             if not (self.gns is None):
                 x = self.gns[layer](x)
             x = self.activation(x)
@@ -458,19 +459,34 @@ class SpectralNet(torch.nn.Module):
         subgraph_to_cluster1 = transposed_s @ l
         adj = utils.to_dense_adj(edge_index, edge_attr=edge_weight, max_num_nodes=x.shape[0])
         out, out_adj, mc_loss1, o_loss1 = dense_mincut_pool(x, adj, s, temp=0.1)
-        out = out.reshape(self.num_clusters1, self.hidden_channels1)
+        out = out.reshape(self.num_clusters1, self.hidden_channels1 * 3)
 
-        # should we use out_adj instead here 
         cluster_sizes = torch.sum(s, dim=0)
-        sorted_cluster_indices = cluster_sizes.sort(descending=True)[1]
+        sorted_cluster_indices1 = cluster_sizes.sort(descending=True)[1]
 
-        embs = []
-        for idx, subgraph in enumerate(pos):
-            r = subgraph_to_cluster1[:, idx]
-            embs.append(r[sorted_cluster_indices])
-        emb1 = torch.stack(embs, dim=0)
+        batch, subg_nodes = pad2batch(pos)
+        emb = x[subg_nodes]
+        emb = global_mean_pool(emb, batch)
 
-        return self.preds[0](emb1), init_embs, emb1, mc_loss1, o_loss1, ent_loss1
+        comp_embs = []
+        node_embs = []
+        for idx, row in enumerate(subgraph_assignment):
+            node_emb = row.reshape(x.shape[0], 1) * x
+            # r = subgraph_to_cluster1[:, idx]
+            cluster_emb = torch.transpose(torch.softmax(s, dim=-1), 0, 1) @ node_emb
+            node_emb = cluster_emb[sorted_cluster_indices1]
+            # cluster_emb = torch.cat([cluster_emb, r.reshape(self.num_clusters1, 1)], dim=-1)
+            # cluster_emb = self.global_sort1(cluster_emb)
+            node_embs.append(node_emb.reshape(self.k1 * self.hidden_channels1 * 3))
+            comp_emb = out - cluster_emb
+            comp_emb = comp_emb[sorted_cluster_indices1]
+            comp_embs.append(comp_emb.reshape(self.k1 * self.hidden_channels1 * 3))
+
+        emb1 = torch.stack(node_embs, dim=0)
+        # emb1 = self.gn1(emb1)
+        emb2 = torch.stack(comp_embs, dim=0)
+
+        return self.preds[0](torch.cat([emb1], dim=-1)), init_embs, emb, mc_loss1, o_loss1, ent_loss1
 
 
 class MyGCNConv(torch.nn.Module):

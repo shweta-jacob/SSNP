@@ -1,6 +1,7 @@
 import argparse
 import random
 import time
+from collections import Counter
 
 import numpy as np
 import torch
@@ -105,6 +106,33 @@ def split():
     trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
     tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
+    train_subg_sizes = []
+    for subg in trn_dataset.pos:
+        subg_size = len(subg[subg != -1])
+        train_subg_sizes.append(subg_size)
+    train_counter = Counter(train_subg_sizes)
+    train_counter = {k: v for k, v in sorted(train_counter.items(), key=lambda x: x[0])}
+
+    train_y_counter = Counter(np.array(trn_dataset.y))
+
+    val_subg_sizes = []
+    for subg in val_dataset.pos:
+        subg_size = len(subg[subg != -1])
+        val_subg_sizes.append(subg_size)
+    val_counter = Counter(val_subg_sizes)
+    val_counter = {k: v for k, v in sorted(val_counter.items(), key=lambda x: x[0])}
+
+    val_y_counter = Counter(np.array(val_dataset.y))
+
+    tst_subg_sizes = []
+    for subg in tst_dataset.pos:
+        subg_size = len(subg[subg != -1])
+        tst_subg_sizes.append(subg_size)
+    tst_counter = Counter(tst_subg_sizes)
+    tst_counter = {k: v for k, v in sorted(tst_counter.items(), key=lambda x: x[0])}
+
+    test_y_counter = Counter(np.array(tst_dataset.y))
+
     train_subgraph_assignment = torch.zeros((trn_dataset.pos.shape[0], trn_dataset.x.shape[0])).to(config.device)
     val_subgraph_assignment = torch.zeros((val_dataset.pos.shape[0], val_dataset.x.shape[0])).to(config.device)
     test_subgraph_assignment = torch.zeros((tst_dataset.pos.shape[0], tst_dataset.x.shape[0])).to(config.device)
@@ -158,8 +186,8 @@ def buildModel(hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_ratio,
         aggr: aggregation method. mean, sum, or gcn. 
     '''
     input_channels = hidden_dim1
-    # if args.use_nodeid:
-    #     input_channels = 64
+    if args.use_nodeid:
+        input_channels = 64
 
     average_nodes = int(trn_dataset.x.size(0))
     print(f"Average number of nodes in graph: {average_nodes}")
@@ -172,12 +200,12 @@ def buildModel(hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_ratio,
                       activation=nn.ELU(inplace=True),
                       jk=jk).to(config.device)
 
-    # if args.use_nodeid:
-    #     print("load ", f"./Emb/{args.dataset}_64.pt")
-    #     emb = torch.load(f"./Emb/{args.dataset}_64.pt",
-    #                      map_location=torch.device('cpu')).detach()
-    #     gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
-    #     gnn.input_emb.to(config.device)
+    if args.use_nodeid:
+        print("load ", f"./Emb/{args.dataset}_64.pt")
+        emb = torch.load(f"./Emb/{args.dataset}_64.pt",
+                         map_location=torch.device('cpu')).detach()
+        gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
+        gnn.input_emb.to(config.device)
     return gnn
 
 
@@ -217,8 +245,8 @@ def test(pool="size",
         trn_loader = loader_fn(trn_dataset, train_subgraph_assignment, batch_size)
         val_loader = tloader_fn(val_dataset, val_subgraph_assignment, batch_size)
         tst_loader = tloader_fn(tst_dataset, test_subgraph_assignment, batch_size)
-        # optimizer = Adam(gnn.parameters(), lr=lr, weight_decay=1e-4)
-        optimizer = SGD(gnn.parameters(), lr=lr, weight_decay=1e-4, momentum=0.8)
+        optimizer = Adam(gnn.parameters(), lr=lr, weight_decay=1e-4)
+        # optimizer = SGD(gnn.parameters(), lr=lr, weight_decay=1e-4, momentum=0.8)
         scd = lr_scheduler.ReduceLROnPlateau(optimizer,
                                              factor=resi,
                                              min_lr=5e-5,
@@ -232,7 +260,7 @@ def test(pool="size",
         early_stop = 0
         trn_time = []
         epochs = []
-        for i in range(100):
+        for i in range(300):
             t1 = time.time()
             train_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn)
             trn_time.append(time.time() - t1)
@@ -240,51 +268,51 @@ def test(pool="size",
 
             if i >= 1:
                 score, val_loss = train.test(gnn,
-                                      val_loader,
-                                      score_fn,
-                                      loss_fn=loss_fn)
+                                             val_loader,
+                                             score_fn,
+                                             loss_fn=loss_fn)
 
                 if score > val_score:
                     early_stop = 0
                     val_score = score
                     score, tst_loss = train.test(gnn,
-                                          tst_loader,
-                                          score_fn,
-                                          loss_fn=loss_fn)
+                                                 tst_loader,
+                                                 score_fn,
+                                                 loss_fn=loss_fn)
                     tst_score = score
                     val_scores.append(val_loss)
                     tst_scores.append(tst_loss)
                     train_scores.append(loss)
-                    epochs.append(i+1)
+                    epochs.append(i + 1)
                     print(
                         f"iter {i + 1} loss {loss:.4f} train {train_score:.4f} val {val_score:.4f} tst {tst_score:.4f}",
                         flush=True)
                 elif score >= val_score - 1e-5:
                     score, tst_loss = train.test(gnn,
-                                          tst_loader,
-                                          score_fn,
-                                          loss_fn=loss_fn)
+                                                 tst_loader,
+                                                 score_fn,
+                                                 loss_fn=loss_fn)
                     tst_score = max(score, tst_score)
                     val_scores.append(val_loss)
                     tst_scores.append(tst_loss)
                     train_scores.append(loss)
-                    epochs.append(i+1)
+                    epochs.append(i + 1)
                     print(
                         f"iter {i + 1} loss {loss:.4f} train {train_score:.4f} val {val_score:.4f} tst {score:.4f}",
                         flush=True)
                 else:
                     early_stop += 1
                     tst_score, tst_loss = train.test(gnn,
-                                          tst_loader,
-                                          score_fn,
-                                          loss_fn=loss_fn)
+                                                     tst_loader,
+                                                     score_fn,
+                                                     loss_fn=loss_fn)
                     print(
-                            f"iter {i + 1} loss {loss:.4f} train {train_score:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn)[0]:.4f}",
-                            flush=True)
+                        f"iter {i + 1} loss {loss:.4f} train {train_score:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn)[0]:.4f}",
+                        flush=True)
                     val_scores.append(val_loss)
                     tst_scores.append(tst_loss)
                     train_scores.append(loss)
-                    epochs.append(i+1)
+                    epochs.append(i + 1)
             if val_score >= 1 - 1e-5:
                 early_stop += 1
             # if early_stop > 100/num_div:
