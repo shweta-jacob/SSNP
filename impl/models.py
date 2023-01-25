@@ -401,7 +401,7 @@ class SpectralNet(torch.nn.Module):
         self.mlp1 = Linear(3 * hidden_channels1, self.num_clusters1)
         self.num_layers = num_layers
         self.k1 = 2
-        self.gn1 = GraphNorm(self.k1 * hidden_channels1)
+        self.gn1 = GraphNorm(self.k1 * 3 * hidden_channels1)
         self.lin = Linear(self.k1, hidden_channels1)
 
         self.preds = torch.nn.ModuleList([MLP(input_channels=self.k1 * hidden_channels1 * 3,
@@ -472,9 +472,11 @@ class SpectralNet(torch.nn.Module):
         node_embs = []
         for idx, row in enumerate(subgraph_assignment):
             node_emb = row.reshape(x.shape[0], 1) * x
-            # r = subgraph_to_cluster1[:, idx]
+            r = subgraph_to_cluster1[:, idx]
             cluster_emb = torch.transpose(torch.softmax(s, dim=-1), 0, 1) @ node_emb
-            node_emb = cluster_emb[sorted_cluster_indices1]
+            r = r[sorted_cluster_indices1]
+            r[r < 1] = 1
+            node_emb = torch.div(cluster_emb[sorted_cluster_indices1], r.reshape(self.k1, 1))
             # cluster_emb = torch.cat([cluster_emb, r.reshape(self.num_clusters1, 1)], dim=-1)
             # cluster_emb = self.global_sort1(cluster_emb)
             node_embs.append(node_emb.reshape(self.k1 * self.hidden_channels1 * 3))
