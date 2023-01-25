@@ -3,15 +3,15 @@ import torch
 import warnings
 import seaborn as sns
 from matplotlib import pyplot as plt
-from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
-
+from sklearn.metrics import silhouette_score
 
 warnings.filterwarnings(action="ignore")
 
-def plot_emb_lookup(x, y):
+def plot_embs_tsne(x, y, title):
     tsne = TSNE(n_components=2, verbose=0, n_iter=250)
-    tsne_results = tsne.fit_transform(x.detach().numpy())
+    x = x.detach().numpy()
+    tsne_results = tsne.fit_transform(x)
 
     df = pd.DataFrame()
     df["y"] = y
@@ -20,27 +20,7 @@ def plot_emb_lookup(x, y):
 
     sns.scatterplot(x="comp-1", y="comp-2", hue=df.y.tolist(),
                     palette=sns.color_palette("hls", 6),
-                    data=df).set(title="Embedding T-SNE projection")
-    plt.show()
-
-def plot_cont_labels(embs, y):
-    import matplotlib
-    import matplotlib.pyplot as plt
-    import numpy as np
-
-    x1 = torch.index_select(torch.tensor(embs), 1, torch.tensor([0]))
-    x2 = torch.index_select(torch.tensor(embs), 1, torch.tensor([1]))
-    label = y
-    colors = ['red', 'green', 'blue', 'purple', 'yellow', 'orange']
-
-    fig = plt.figure(figsize=(8, 8))
-    plt.scatter(x1.detach().numpy(), x2.detach().numpy(), c=label.detach().numpy(),
-                cmap=matplotlib.colors.ListedColormap(colors))
-
-    cb = plt.colorbar()
-    loc = np.arange(0, max(label), max(label) / float(len(colors)))
-    cb.set_ticks(loc)
-    cb.set_ticklabels(colors)
+                    data=df).set(title=f"{title} SIL: {silhouette_score(x, y):.4f}")
     plt.show()
 
 
@@ -52,13 +32,13 @@ def train(optimizer, model, dataloader, metrics, loss_fn):
     total_loss = []
     preds = []
     ys = []
-    embs = []
-    init_embs = []
+    all_cont_labels = []
+    all_subg_embs = []
     for batch in dataloader:
         optimizer.zero_grad()
-        pred, init_emb, emb, mc_loss, o_loss, ent_loss = model(*batch[:-1])
-        init_embs.append(init_emb)
-        embs.append(emb)
+        pred, subg_embs, cont_labels, mc_loss, o_loss, ent_loss = model(*batch[:-1])
+        all_subg_embs.append(subg_embs)
+        all_cont_labels.append(cont_labels)
         preds.append(pred)
         ys.append(batch[-1])
         classification_loss = loss_fn(pred, batch[-1])
@@ -69,14 +49,10 @@ def train(optimizer, model, dataloader, metrics, loss_fn):
         optimizer.step()
     pred = torch.cat(preds, dim=0)
     y = torch.cat(ys, dim=0)
-    embs = torch.cat(embs, dim=0)
-    # init_embs = torch.cat(init_embs, dim=0)
-    # plot_emb_lookup(init_embs, y)
-    # plot_emb_lookup(embs, y)
-    # pca = PCA(n_components=2, svd_solver='full')
-    # init_embs = pca.fit_transform(init_embs.detach().numpy())
-    # plot_cont_labels(init_embs, y)
-    # plot_cont_labels(embs.detach().numpy(), y)
+    all_cont_labels = torch.cat(all_cont_labels, dim=0)
+    all_subg_embs = torch.cat(all_subg_embs, dim=0)
+    plot_embs_tsne(all_subg_embs, y, "Embedding T-SNE projection")
+    plot_embs_tsne(all_cont_labels, y, "Contribution Label T-SNE projection")
     return metrics(pred.detach().cpu().numpy(), y.cpu().numpy()), sum(total_loss) / len(
         total_loss)
 

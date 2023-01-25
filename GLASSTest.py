@@ -106,32 +106,6 @@ def split():
     trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
     tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
-    train_subg_sizes = []
-    for subg in trn_dataset.pos:
-        subg_size = len(subg[subg != -1])
-        train_subg_sizes.append(subg_size)
-    train_counter = Counter(train_subg_sizes)
-    train_counter = {k: v for k, v in sorted(train_counter.items(), key=lambda x: x[0])}
-
-    train_y_counter = Counter(np.array(trn_dataset.y))
-
-    val_subg_sizes = []
-    for subg in val_dataset.pos:
-        subg_size = len(subg[subg != -1])
-        val_subg_sizes.append(subg_size)
-    val_counter = Counter(val_subg_sizes)
-    val_counter = {k: v for k, v in sorted(val_counter.items(), key=lambda x: x[0])}
-
-    val_y_counter = Counter(np.array(val_dataset.y))
-
-    tst_subg_sizes = []
-    for subg in tst_dataset.pos:
-        subg_size = len(subg[subg != -1])
-        tst_subg_sizes.append(subg_size)
-    tst_counter = Counter(tst_subg_sizes)
-    tst_counter = {k: v for k, v in sorted(tst_counter.items(), key=lambda x: x[0])}
-
-    test_y_counter = Counter(np.array(tst_dataset.y))
 
     train_subgraph_assignment = torch.zeros((trn_dataset.pos.shape[0], trn_dataset.x.shape[0])).to(config.device)
     val_subgraph_assignment = torch.zeros((val_dataset.pos.shape[0], val_dataset.x.shape[0])).to(config.device)
@@ -186,8 +160,8 @@ def buildModel(hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_ratio,
         aggr: aggregation method. mean, sum, or gcn. 
     '''
     input_channels = hidden_dim1
-    if args.use_nodeid:
-        input_channels = 64
+    # if args.use_nodeid:
+    #     input_channels = 64
 
     average_nodes = int(trn_dataset.x.size(0))
     print(f"Average number of nodes in graph: {average_nodes}")
@@ -200,12 +174,12 @@ def buildModel(hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_ratio,
                       activation=nn.ELU(inplace=True),
                       jk=jk).to(config.device)
 
-    if args.use_nodeid:
-        print("load ", f"./Emb/{args.dataset}_64.pt")
-        emb = torch.load(f"./Emb/{args.dataset}_64.pt",
-                         map_location=torch.device('cpu')).detach()
-        gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
-        gnn.input_emb.to(config.device)
+    # if args.use_nodeid:
+    #     print("load ", f"./Emb/{args.dataset}_64.pt")
+    #     emb = torch.load(f"./Emb/{args.dataset}_64.pt",
+    #                      map_location=torch.device('cpu')).detach()
+    #     gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
+    #     gnn.input_emb.to(config.device)
     return gnn
 
 
@@ -260,7 +234,7 @@ def test(pool="size",
         early_stop = 0
         trn_time = []
         epochs = []
-        for i in range(300):
+        for i in range(50):
             t1 = time.time()
             train_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn)
             trn_time.append(time.time() - t1)
