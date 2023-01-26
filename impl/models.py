@@ -453,10 +453,10 @@ class SpectralNet(torch.nn.Module):
 
         # Cluster assignments (logits)
         s = self.mlp1(x)
-        s = torch.softmax(s / 0.1, dim=-1)
-        ent_loss1 = (-s * torch.log(s + 1e-15)).sum(dim=-1).mean()
+        softmax_s = torch.softmax(s / 0.1, dim=-1)
+        ent_loss1 = (-softmax_s * torch.log(softmax_s + 1e-15)).sum(dim=-1).mean()
         l = torch.transpose(subgraph_assignment, 0, 1)
-        transposed_s = torch.transpose(s, 0, 1)
+        transposed_s = torch.transpose(softmax_s, 0, 1)
         subgraph_to_cluster1 = transposed_s @ l
         adj = utils.to_dense_adj(edge_index, edge_attr=edge_weight, max_num_nodes=x.shape[0])
         out, out_adj, mc_loss1, o_loss1 = dense_mincut_pool(x, adj, s, temp=0.1)
