@@ -1,16 +1,18 @@
 import argparse
 import random
 import time
-from collections import Counter
 
+import networkx as nx
 import numpy as np
 import torch
 import torch.nn as nn
 import yaml
 from matplotlib import pyplot as plt
 from matplotlib.pyplot import figure
+from networkx.algorithms.community import modularity
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 from torch.optim import Adam, lr_scheduler, SGD
+from torch_geometric.utils import to_networkx
 
 import datasets
 from artificial import graph1, graph3, graph4, graph5, graph2, graph7, graph8, graph9
@@ -52,7 +54,8 @@ if args.use_seed:
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.enabled = False
 
-baseG = datasets.load_dataset(args.dataset)
+# baseG = datasets.load_dataset(args.dataset)
+baseG = graph7.load_dataset()
 
 trn_dataset, val_dataset, tst_dataset = None, None, None
 train_subgraph_assignment, val_subgraph_assignment, test_subgraph_assignment = None, None, None
@@ -183,6 +186,30 @@ def buildModel(hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_ratio,
     return gnn
 
 
+def draw_clustering_on_g(nx_graph, s):
+    # only support k = 2.
+    color_map = []
+    threshold = 0.9
+    communities = [[], [], []]
+    for node in nx_graph:
+        score = s[node]
+        if float(score[0]) >= threshold:
+            color = 'red'
+            communities[0].append(node)
+        elif float(score[1]) >= threshold:
+            color = 'blue'
+            communities[1].append(node)
+        else:
+            color = 'grey'
+            communities[2].append(node)
+        color_map.append(color)
+
+    nx.draw(nx_graph, node_color=color_map, with_labels=True, pos=nx.spring_layout(nx_graph))
+    plt.show()
+    mod = modularity(nx_graph, communities=communities)
+    print(f"Modularity: {mod}")
+
+
 def test(pool="size",
          aggr="mean",
          hidden_dim1=64,
@@ -210,6 +237,7 @@ def test(pool="size",
         num_div /= 30
 
     outs = []
+    nx_graph = to_networkx(baseG.to(config.device), to_undirected=True, remove_self_loops=False)
     for repeat in range(args.repeat):
         set_seed((1 << repeat) - 1)
         print(f"repeat {repeat}")
@@ -234,9 +262,10 @@ def test(pool="size",
         early_stop = 0
         trn_time = []
         epochs = []
+        s = None
         for i in range(50):
             t1 = time.time()
-            train_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn)
+            train_score, loss, s = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn)
             trn_time.append(time.time() - t1)
             scd.step(loss)
 
@@ -301,6 +330,10 @@ def test(pool="size",
         plt.ylabel("Loss")
         plt.legend(['Train', 'Validation', 'Test'])
         plt.show()
+
+        # s, nx_graph
+        draw_clustering_on_g(nx_graph, s)
+
     print(
         f"average {np.average(outs):.3f} error {np.std(outs) / np.sqrt(len(outs)):.3f}"
     )

@@ -471,7 +471,7 @@ class SpectralNet(torch.nn.Module):
             embs.append(r[sorted_cluster_indices1])
         cont_labels = torch.stack(embs, dim=0)
 
-        return self.preds[0](torch.cat([cont_labels], dim=-1)), subg_embs, cont_labels, mc_loss1, o_loss1, ent_loss1
+        return self.preds[0](torch.cat([cont_labels], dim=-1)), subg_embs, cont_labels, mc_loss1, o_loss1, ent_loss1, s
 
 
 class MyGCNConv(torch.nn.Module):

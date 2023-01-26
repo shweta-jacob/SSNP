@@ -9,7 +9,7 @@ from sklearn.metrics import silhouette_score
 warnings.filterwarnings(action="ignore")
 
 def plot_embs_tsne(x, y, title):
-    tsne = TSNE(n_components=2, verbose=0, n_iter=250)
+    tsne = TSNE(n_components=2, verbose=0, n_iter=250, perplexity=2)
     x = x.detach().numpy()
     tsne_results = tsne.fit_transform(x)
 
@@ -19,7 +19,7 @@ def plot_embs_tsne(x, y, title):
     df["comp-2"] = tsne_results[:, 1]
 
     sns.scatterplot(x="comp-1", y="comp-2", hue=df.y.tolist(),
-                    palette=sns.color_palette("hls", 6),
+                    palette=sns.color_palette("hls", 2),
                     data=df).set(title=f"{title} SIL: {silhouette_score(x, y):.4f}")
     plt.show()
 
@@ -34,9 +34,10 @@ def train(optimizer, model, dataloader, metrics, loss_fn):
     ys = []
     all_cont_labels = []
     all_subg_embs = []
+    s = None
     for batch in dataloader:
         optimizer.zero_grad()
-        pred, subg_embs, cont_labels, mc_loss, o_loss, ent_loss = model(*batch[:-1])
+        pred, subg_embs, cont_labels, mc_loss, o_loss, ent_loss, s = model(*batch[:-1])
         all_subg_embs.append(subg_embs)
         all_cont_labels.append(cont_labels)
         preds.append(pred)
@@ -52,10 +53,10 @@ def train(optimizer, model, dataloader, metrics, loss_fn):
     y = torch.cat(ys, dim=0)
     all_cont_labels = torch.cat(all_cont_labels, dim=0)
     all_subg_embs = torch.cat(all_subg_embs, dim=0)
-    plot_embs_tsne(all_subg_embs, y, "Embedding T-SNE projection")
-    plot_embs_tsne(all_cont_labels, y, "Contribution Label T-SNE projection")
+    # plot_embs_tsne(all_subg_embs, y, "Embedding T-SNE projection")
+    # plot_embs_tsne(all_cont_labels, y, "Contribution Label T-SNE projection")
     return metrics(pred.detach().cpu().numpy(), y.cpu().numpy()), sum(total_loss) / len(
-        total_loss)
+        total_loss), s
 
 
 @torch.no_grad()
@@ -68,7 +69,7 @@ def test(model, dataloader, metrics, loss_fn):
     ys = []
     total_loss = []
     for batch in dataloader:
-        pred, init_emb, emb, mc_loss, o_loss, ent_loss = model(*batch[:-1])
+        pred, init_emb, emb, mc_loss, o_loss, ent_loss, s = model(*batch[:-1])
         preds.append(pred)
         ys.append(batch[-1])
         classification_loss = loss_fn(pred, batch[-1])
