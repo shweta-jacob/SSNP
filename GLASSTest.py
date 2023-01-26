@@ -204,9 +204,12 @@ def draw_clustering_on_g(nx_graph, s):
             communities[2].append(node)
         color_map.append(color)
 
-    nx.draw(nx_graph, node_color=color_map, with_labels=True, pos=nx.spring_layout(nx_graph))
-    plt.show()
     mod = modularity(nx_graph, communities=communities)
+    ax = plt.gca()
+    ax.set_title(f'Modularity = {mod:.4f}')
+    nx.draw(nx_graph, node_color=color_map, with_labels=True, pos=nx.spring_layout(nx_graph), ax=ax)
+    plt.show()
+
     print(f"Modularity: {mod}")
 
 
