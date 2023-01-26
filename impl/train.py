@@ -41,9 +41,10 @@ def train(optimizer, model, dataloader, metrics, loss_fn):
         all_cont_labels.append(cont_labels)
         preds.append(pred)
         ys.append(batch[-1])
+        beta = 0
         classification_loss = loss_fn(pred, batch[-1])
         clustering_loss = mc_loss + o_loss + ent_loss
-        loss = classification_loss + clustering_loss
+        loss = classification_loss + beta * clustering_loss
         loss.backward()
         total_loss.append(loss.detach().item())
         optimizer.step()

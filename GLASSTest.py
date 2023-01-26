@@ -276,10 +276,6 @@ def test(pool="size",
                         flush=True)
                 else:
                     early_stop += 1
-                    tst_score, tst_loss = train.test(gnn,
-                                                     tst_loader,
-                                                     score_fn,
-                                                     loss_fn=loss_fn)
                     print(
                         f"iter {i + 1} loss {loss:.4f} train {train_score:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn)[0]:.4f}",
                         flush=True)
@@ -292,7 +288,7 @@ def test(pool="size",
             # if early_stop > 100/num_div:
             #     break
         print(
-            f"end: epoch {i + 1}, train time {sum(trn_time):.2f} s, train {train_score:.4f} val {val_score:.3f}, tst {tst_score:.3f}",
+            f"end: train time {sum(trn_time):.2f} s, train {train_score:.4f} val {val_score:.3f}, tst {tst_score:.3f}",
             flush=True)
         outs.append(tst_score)
         figure(figsize=(8, 6))
