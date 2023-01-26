@@ -189,7 +189,7 @@ def buildModel(hidden_dim1, hidden_dim2, conv_layer, dropout, jk, pool, z_ratio,
 def draw_clustering_on_g(nx_graph, s):
     # only support k = 2.
     color_map = []
-    threshold = 0.9
+    threshold = 0.75
     communities = [[], [], []]
     for node in nx_graph:
         score = s[node]
