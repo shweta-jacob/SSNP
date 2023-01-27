@@ -409,12 +409,12 @@ class SpectralNet(torch.nn.Module):
                                               num_layers=2, dropout=0.5)])
 
         self.reset_parameters()
-        self._weights_init(self.mlp1)
+        self._weights_init(self.input_emb)
 
     def _weights_init(self, lin_layer):
         torch.nn.init.xavier_uniform_(lin_layer.weight.data)
-        if lin_layer.bias is not None:
-            lin_layer.bias.data.fill_(0.0)
+        # if lin_layer.bias is not None:
+        #     lin_layer.bias.data.fill_(0.0)
 
     def reset_parameters(self):
         self.input_emb.reset_parameters()
