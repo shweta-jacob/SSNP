@@ -18,13 +18,15 @@ def plot_embs_tsne(x, y, title):
     df["comp-1"] = tsne_results[:, 0]
     df["comp-2"] = tsne_results[:, 1]
 
-    sns.scatterplot(x="comp-1", y="comp-2", hue=df.y.tolist(),
-                    palette=sns.color_palette("hls", 2),
-                    data=df).set(title=f"{title} SIL: {silhouette_score(x, y):.4f}")
-    plt.show()
+    print(f"{title} SIL: {silhouette_score(x, y):.4f}")
+
+    # sns.scatterplot(x="comp-1", y="comp-2", hue=df.y.tolist(),
+    #                 palette=sns.color_palette("hls", 4),
+    #                 data=df).set(title=f"{title} SIL: {silhouette_score(x, y):.4f}")
+    # plt.show()
 
 
-def train(optimizer, model, dataloader, metrics, loss_fn):
+def train(optimizer, model, dataloader, metrics, loss_fn, epoch):
     '''
     Train models in an epoch.
     '''
@@ -51,10 +53,11 @@ def train(optimizer, model, dataloader, metrics, loss_fn):
         optimizer.step()
     pred = torch.cat(preds, dim=0)
     y = torch.cat(ys, dim=0)
-    all_cont_labels = torch.cat(all_cont_labels, dim=0)
-    all_subg_embs = torch.cat(all_subg_embs, dim=0)
-    # plot_embs_tsne(all_subg_embs, y, "Embedding T-SNE projection")
-    # plot_embs_tsne(all_cont_labels, y, "Contribution Label T-SNE projection")
+    if epoch == 49:
+        all_cont_labels = torch.cat(all_cont_labels, dim=0)
+        all_subg_embs = torch.cat(all_subg_embs, dim=0)
+        plot_embs_tsne(all_subg_embs, y, "Embedding T-SNE projection")
+        plot_embs_tsne(all_cont_labels, y, "Contribution Label T-SNE projection")
     return metrics(pred.detach().cpu().numpy(), y.cpu().numpy()), sum(total_loss) / len(
         total_loss), s
 
@@ -74,7 +77,8 @@ def test(model, dataloader, metrics, loss_fn):
         ys.append(batch[-1])
         classification_loss = loss_fn(pred, batch[-1])
         clustering_loss = mc_loss + o_loss + ent_loss
-        loss = classification_loss + clustering_loss
+        beta = 0
+        loss = classification_loss + beta * clustering_loss
         total_loss.append(loss.detach().item())
     pred = torch.cat(preds, dim=0)
     y = torch.cat(ys, dim=0)
