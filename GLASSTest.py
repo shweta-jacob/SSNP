@@ -274,7 +274,7 @@ def test(pool="size",
         s = None
         for i in range(50):
             t1 = time.time()
-            train_score, loss, s = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn)
+            train_score, loss, s = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn, i)
             trn_time.append(time.time() - t1)
             scd.step(loss)
 
