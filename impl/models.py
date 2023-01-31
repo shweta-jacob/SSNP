@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.utils.rnn import pad_sequence
 from torch_geometric.nn import GCNConv, global_max_pool, global_mean_pool, global_add_pool
 from torch_geometric.nn.norm import GraphNorm, GraphSizeNorm
 from .utils import pad2batch

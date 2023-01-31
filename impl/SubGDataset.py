@@ -13,13 +13,13 @@ class GDataset:
             For example, [[0, 1, 2], [6, 7, -1]] means two subgraphs containing nodes 0, 1, 2 and 6, 7 respectively.
         y : the target of subgraphs.
     '''
-    def __init__(self, x, edge_index, edge_attr, pos, y):
+    def __init__(self, x, edge_index, edge_attr, pos, y, device):
         self.x=x
         self.edge_index=edge_index
         self.edge_attr=edge_attr
         self.y=y
         self.pos=pos
-        self.comp = self.get_complement()
+        self.comp = self.get_complement(device)
         self.num_nodes = x.shape[0]
 
     def __len__(self):
@@ -28,12 +28,12 @@ class GDataset:
     def __getitem__(self, idx):
         return self.pos[idx], self.y[idx]
 
-    def get_complement(self):
+    def get_complement(self, device):
         complement = []
         for subgraph in self.pos:
             subgraph = list(filter(lambda node: node != -1, subgraph.tolist()))
             subg_comp = torch.Tensor(list(set(range(self.x.shape[0])).difference(subgraph)))
-            complement.append(subg_comp)
+            complement.append(subg_comp.to(device))
         return pad_sequence(complement, batch_first=True, padding_value=-1).to(torch.int64)
 
     def to(self, device):

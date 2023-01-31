@@ -103,9 +103,9 @@ def split():
     max_deg = torch.max(baseG.x)
     baseG.to(config.device)
     # split data
-    trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
-    val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
-    tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
+    trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"), config.device)
+    val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"), config.device)
+    tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"), config.device)
     # choice of dataloader
     if args.use_maxzeroone:
 
@@ -292,6 +292,7 @@ def test(pool="size",
             f"end: epoch {i}, train time {sum(trn_time):.2f} s, train {trn_score:.4f} val {val_score:.3f}, tst {tst_score:.3f}",
             flush=True)
         outs.append(tst_score)
+    print(f"Time for {args.dataset} dataset and model {args.model}")
     print(f"Average run time: {np.average(run_times):.3f} with std {np.std(run_times):.3f}")
     print(f"Average preprocessing time: {np.average(preproc_times):.3f} with std {np.std(preproc_times):.3f}")
     print(f"Average train time: {np.average(trn_time):.3f} with std {np.std(trn_time):.3f}")
