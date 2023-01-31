@@ -203,15 +203,23 @@ def test(pool="size",
         num_div /= 5
 
     outs = []
+    run_times = []
+    trn_time = []
+    inference_time = []
+    preproc_times = []
     for repeat in range(args.repeat):
+        start_time = time.time()
         set_seed((1 << repeat) - 1)
         print(f"repeat {repeat}")
+        start_pre = time.time()
         split()
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio,
                          aggr)
         trn_loader = loader_fn(trn_dataset, batch_size)
         val_loader = tloader_fn(val_dataset, batch_size)
         tst_loader = tloader_fn(tst_dataset, batch_size)
+        end_pre = time.time()
+        preproc_times.append(end_pre - start_pre)
         optimizer = Adam(gnn.parameters(), lr=lr)
         scd = lr_scheduler.ReduceLROnPlateau(optimizer,
                                              factor=resi,
@@ -219,8 +227,7 @@ def test(pool="size",
         val_score = 0
         tst_score = 0
         early_stop = 0
-        trn_time = []
-        for i in range(300):
+        for i in range(100):
             t1 = time.time()
             trn_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn)
             trn_time.append(time.time() - t1)
@@ -235,19 +242,25 @@ def test(pool="size",
                 if score > val_score:
                     early_stop = 0
                     val_score = score
+                    inf_start = time.time()
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
                                           loss_fn=loss_fn)
+                    inf_end = time.time()
+                    inference_time.append(inf_end - inf_start)
                     tst_score = score
                     print(
                         f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {val_score:.4f} tst {tst_score:.4f}",
                         flush=True)
                 elif score >= val_score - 1e-5:
+                    inf_start = time.time()
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
                                           loss_fn=loss_fn)
+                    inf_end = time.time()
+                    inference_time.append(inf_end - inf_start)
                     tst_score = max(score, tst_score)
                     print(
                         f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {val_score:.4f} tst {score:.4f}",
@@ -255,21 +268,32 @@ def test(pool="size",
                 else:
                     early_stop += 1
                     if i % 10 == 0:
+                        inf_start = time.time()
+                        test = train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn)
+                        inf_end = time.time()
+                        inference_time.append(inf_end - inf_start)
                         print(
-                            f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn)[0]:.4f}",
+                            f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {score:.4f} tst {test[0]:.4f}",
                             flush=True)
             if val_score >= 1 - 1e-5:
                 early_stop += 1
             # if early_stop > 100 / num_div:
             #     break
+        end_time = time.time()
+        run_time = end_time - start_time
+        run_times.append(run_time)
+        print(f"Total run time: {run_time}")
         print(
             f"end: epoch {i}, train time {sum(trn_time):.2f} s, train {trn_score:.4f} val {val_score:.3f}, tst {tst_score:.3f}",
             flush=True)
         outs.append(tst_score)
+    print(f"Average train time: {np.average(trn_time):.3f} with std {np.std(trn_time):.3f}")
+    print(f"Average inference time: {np.average(inference_time):.3f} with std {np.std(inference_time):.3f}")
+    print(f"Average run time: {np.average(run_times):.3f} with std {np.std(run_times):.3f}")
+    print(f"Average preprocessing time: {np.average(preproc_times):.3f} with std {np.std(preproc_times):.3f}")
     print(
         f"average {np.average(outs):.3f} error {np.std(outs) / np.sqrt(len(outs)):.3f}"
     )
-
 
 print(args)
 # read configuration
