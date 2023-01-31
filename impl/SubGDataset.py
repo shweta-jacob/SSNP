@@ -1,3 +1,4 @@
+from torch.nn.utils.rnn import pad_sequence
 from torch_geometric.data import Data
 import torch
 from torch.utils.data import DataLoader
@@ -18,6 +19,7 @@ class GDataset:
         self.edge_attr=edge_attr
         self.y=y
         self.pos=pos
+        self.comp = self.get_complement()
         self.num_nodes = x.shape[0]
 
     def __len__(self):
@@ -26,11 +28,20 @@ class GDataset:
     def __getitem__(self, idx):
         return self.pos[idx], self.y[idx]
 
+    def get_complement(self):
+        complement = []
+        for subgraph in self.pos:
+            subgraph = list(filter(lambda node: node != -1, subgraph.tolist()))
+            subg_comp = torch.Tensor(list(set(range(self.x.shape[0])).difference(subgraph)))
+            complement.append(subg_comp)
+        return pad_sequence(complement, batch_first=True, padding_value=-1).to(torch.int64)
+
     def to(self, device):
         self.x = self.x.to(device)
         self.edge_index = self.edge_index.to(device)
         self.edge_attr = self.edge_attr.to(device)
         self.pos = self.pos.to(device)
+        self.comp = self.comp.to(device)
         self.y = self.y.to(device)
         return self
 
@@ -59,6 +70,9 @@ class GDataloader(DataLoader):
     def get_pos(self):
         return self.Gdataset.pos
 
+    def get_comp(self):
+        return self.Gdataset.comp
+
     def get_y(self):
         return self.Gdataset.y
 
@@ -69,7 +83,7 @@ class GDataloader(DataLoader):
     def __next__(self):
         perm = next(self.iter)
         return self.get_x(), self.get_ei(), self.get_ea(), self.get_pos(
-        )[perm], self.get_y()[perm]
+        )[perm], self.get_comp()[perm], self.get_y()[perm]
 
 
 class ZGDataloader(GDataloader):

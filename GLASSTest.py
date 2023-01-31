@@ -22,6 +22,8 @@ parser.add_argument('--dataset', type=str, default='ppi_bp')
 parser.add_argument('--use_deg', action='store_true')
 parser.add_argument('--use_one', action='store_true')
 parser.add_argument('--use_nodeid', action='store_true')
+# model 0 means use subgraph emb. model 1 means use complement emb. model 3 means use both subgraph and complement.
+parser.add_argument('--model', type=int, default=0)
 # node label settings
 parser.add_argument('--use_maxzeroone', action='store_true')
 
@@ -158,7 +160,10 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
                          map_location=torch.device('cpu')).detach()
         conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
 
-    mlp = nn.Linear(hidden_dim * (conv_layer) if jk else hidden_dim,
+    num_rep = 1
+    if args.model == 2:
+        num_rep = 2
+    mlp = nn.Linear(hidden_dim * (conv_layer) * num_rep if jk else hidden_dim,
                     output_channels)
 
     pool_fn_fn = {
@@ -173,7 +178,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
         raise NotImplementedError
 
     gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]),
-                       torch.nn.ModuleList([pool_fn1])).to(config.device)
+                       torch.nn.ModuleList([pool_fn1]), args.model).to(config.device)
     return gnn
 
 
@@ -287,10 +292,10 @@ def test(pool="size",
             f"end: epoch {i}, train time {sum(trn_time):.2f} s, train {trn_score:.4f} val {val_score:.3f}, tst {tst_score:.3f}",
             flush=True)
         outs.append(tst_score)
-    print(f"Average train time: {np.average(trn_time):.3f} with std {np.std(trn_time):.3f}")
-    print(f"Average inference time: {np.average(inference_time):.3f} with std {np.std(inference_time):.3f}")
     print(f"Average run time: {np.average(run_times):.3f} with std {np.std(run_times):.3f}")
     print(f"Average preprocessing time: {np.average(preproc_times):.3f} with std {np.std(preproc_times):.3f}")
+    print(f"Average train time: {np.average(trn_time):.3f} with std {np.std(trn_time):.3f}")
+    print(f"Average inference time: {np.average(inference_time):.3f} with std {np.std(inference_time):.3f}")
     print(
         f"average {np.average(outs):.3f} error {np.std(outs) / np.sqrt(len(outs)):.3f}"
     )

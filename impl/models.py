@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.utils.rnn import pad_sequence
 from torch_geometric.nn import GCNConv, global_max_pool, global_mean_pool, global_add_pool
 from torch_geometric.nn.norm import GraphNorm, GraphSizeNorm
 from .utils import pad2batch
@@ -316,11 +317,12 @@ class GLASS(nn.Module):
         preds[id] and pools[id] is used to predict the id-th target. Can be used for SSL.
     '''
     def __init__(self, conv: EmbZGConv, preds: nn.ModuleList,
-                 pools: nn.ModuleList):
+                 pools: nn.ModuleList, model_type):
         super().__init__()
         self.conv = conv
         self.preds = preds
         self.pools = pools
+        self.model_type = model_type
 
     def NodeEmb(self, x, edge_index, edge_weight, z=None):
         embs = []
@@ -332,19 +334,29 @@ class GLASS(nn.Module):
         emb = torch.mean(emb, dim=1)
         return emb
 
-    def Pool(self, emb, subG_node, pool):
-        graph_emb = torch.sum(emb, dim=0)
-        batch, pos = pad2batch(subG_node)
-        emb = emb[pos]
-        emb = pool(emb, batch)
-        emb_comp_sum = []
-        all_graph_embs = [graph_emb] * len(subG_node)
-        comp_sum = torch.sub(graph_emb, emb)
+    def Pool(self, emb, subG_node, comp_node, pool):
+        if self.model_type == 0:
+            batch, pos = pad2batch(subG_node)
+            emb_subg = emb[pos]
+            emb = pool(emb_subg, batch)
+        elif self.model_type == 1:
+            batch_comp, pos_comp = pad2batch(comp_node)
+            emb_comp = emb[pos_comp]
+            emb = pool(emb_comp, batch_comp)
+        else:
+            batch, pos = pad2batch(subG_node)
+            emb_subg = emb[pos]
+            emb_subg = pool(emb_subg, batch)
+            batch_comp, pos_comp = pad2batch(comp_node)
+            emb_comp = emb[pos_comp]
+            emb_comp = pool(emb_comp, batch_comp)
+            emb = torch.cat([emb_subg, emb_comp], dim=-1)
+
         return emb
 
-    def forward(self, x, edge_index, edge_weight, subG_node, z=None, id=0):
+    def forward(self, x, edge_index, edge_weight, subG_node, comp_node, z=None, id=0):
         emb = self.NodeEmb(x, edge_index, edge_weight, z)
-        emb = self.Pool(emb, subG_node, self.pools[id])
+        emb = self.Pool(emb, subG_node, comp_node, self.pools[id])
         return self.preds[id](emb)
 
 
