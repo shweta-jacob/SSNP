@@ -1,3 +1,5 @@
+import json
+
 from torch_geometric.nn import GCNConv
 
 from impl import models, SubGDataset, train, metrics, utils, config
@@ -297,9 +299,23 @@ def test(pool="size",
     print(f"Average preprocessing time: {np.average(preproc_times):.3f} with std {np.std(preproc_times):.3f}")
     print(f"Average train time: {np.average(trn_time):.3f} with std {np.std(trn_time):.3f}")
     print(f"Average inference time: {np.average(inference_time):.3f} with std {np.std(inference_time):.3f}")
+    tst_average = np.average(outs)
+    tst_error = np.std(outs) / np.sqrt(len(outs))
     print(
-        f"average {np.average(outs):.3f} error {np.std(outs) / np.sqrt(len(outs)):.3f}"
+        f"average {tst_average :.3f} error {tst_error :.3f}"
     )
+    exp_results = {}
+    exp_results[f"{args.dataset}_model{args.model}"] = {
+        "results": {
+            "Test Accuracy": f"{tst_average :.3f} error {tst_error :.3f}",
+            "Avg runtime": f"{np.average(run_times):.3f} with std {np.std(run_times):.3f}",
+            "Avg preprocessing time": f"{np.average(preproc_times):.3f} with std {np.std(preproc_times):.3f}",
+            "Avg train time": f"{np.average(trn_time):.3f} with std {np.std(trn_time):.3f}",
+            "Avg inference time": f"{np.average(inference_time):.3f} with std {np.std(inference_time):.3f}",
+        },
+    }
+    with open(f"{args.dataset}_model{args.model}_results.json", 'w') as output_file:
+        json.dump(exp_results, output_file)
 
 print(args)
 # read configuration
