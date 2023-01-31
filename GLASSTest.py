@@ -1,3 +1,5 @@
+from torch_geometric.nn import GCNConv
+
 from impl import models, SubGDataset, train, metrics, utils, config
 import datasets
 import torch
@@ -143,7 +145,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
                             activation=nn.ELU(inplace=True),
                             jk=jk,
                             dropout=dropout,
-                            conv=functools.partial(models.GLASSConv,
+                            conv=functools.partial(GCNConv,
                                                    aggr=aggr,
                                                    z_ratio=z_ratio,
                                                    dropout=dropout),
@@ -220,11 +222,11 @@ def test(pool="size",
         trn_time = []
         for i in range(300):
             t1 = time.time()
-            loss = train.train(optimizer, gnn, trn_loader, loss_fn)
+            trn_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn)
             trn_time.append(time.time() - t1)
             scd.step(loss)
 
-            if i >= 100 / num_div:
+            if i >= 0:
                 score, _ = train.test(gnn,
                                       val_loader,
                                       score_fn,
@@ -239,7 +241,7 @@ def test(pool="size",
                                           loss_fn=loss_fn)
                     tst_score = score
                     print(
-                        f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {tst_score:.4f}",
+                        f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {val_score:.4f} tst {tst_score:.4f}",
                         flush=True)
                 elif score >= val_score - 1e-5:
                     score, _ = train.test(gnn,
@@ -248,20 +250,20 @@ def test(pool="size",
                                           loss_fn=loss_fn)
                     tst_score = max(score, tst_score)
                     print(
-                        f"iter {i} loss {loss:.4f} val {val_score:.4f} tst {score:.4f}",
+                        f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {val_score:.4f} tst {score:.4f}",
                         flush=True)
                 else:
                     early_stop += 1
                     if i % 10 == 0:
                         print(
-                            f"iter {i} loss {loss:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn)[0]:.4f}",
+                            f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {score:.4f} tst {train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn)[0]:.4f}",
                             flush=True)
             if val_score >= 1 - 1e-5:
                 early_stop += 1
-            if early_stop > 100 / num_div:
-                break
+            # if early_stop > 100 / num_div:
+            #     break
         print(
-            f"end: epoch {i+1}, train time {sum(trn_time):.2f} s, val {val_score:.3f}, tst {tst_score:.3f}",
+            f"end: epoch {i}, train time {sum(trn_time):.2f} s, train {trn_score:.4f} val {val_score:.3f}, tst {tst_score:.3f}",
             flush=True)
         outs.append(tst_score)
     print(

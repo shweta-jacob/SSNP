@@ -1,9 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
+from torch_geometric.nn import GCNConv, global_max_pool, global_mean_pool, global_add_pool
 from torch_geometric.nn.norm import GraphNorm, GraphSizeNorm
-from torch_geometric.nn.glob.glob import global_mean_pool, global_add_pool, global_max_pool
 from .utils import pad2batch
 
 
@@ -190,7 +189,7 @@ class EmbZGConv(nn.Module):
                  max_deg,
                  dropout=0,
                  activation=nn.ReLU(),
-                 conv=GLASSConv,
+                 conv=GCNConv,
                  gn=True,
                  jk=False,
                  **kwargs):
@@ -204,14 +203,10 @@ class EmbZGConv(nn.Module):
         for _ in range(num_layers - 1):
             self.convs.append(
                 conv(in_channels=hidden_channels,
-                     out_channels=hidden_channels,
-                     activation=activation,
-                     **kwargs))
+                     out_channels=hidden_channels))
         self.convs.append(
             conv(in_channels=hidden_channels,
-                 out_channels=output_channels,
-                 activation=activation,
-                 **kwargs))
+                 out_channels=output_channels))
         self.activation = activation
         self.dropout = dropout
         if gn:
@@ -238,12 +233,6 @@ class EmbZGConv(nn.Module):
                 gn.reset_parameters()
 
     def forward(self, x, edge_index, edge_weight, z=None):
-        # z is the node label.
-        if z is None:
-            mask = (torch.zeros(
-                (x.shape[0]), device=x.device) < 0.5).reshape(-1, 1)
-        else:
-            mask = (z > 0.5).reshape(-1, 1)
         # convert integer input to vector node features.
         x = self.input_emb(x).reshape(x.shape[0], -1)
         x = self.emb_gn(x)
@@ -251,13 +240,13 @@ class EmbZGConv(nn.Module):
         x = F.dropout(x, p=self.dropout, training=self.training)
         # pass messages at each layer.
         for layer, conv in enumerate(self.convs[:-1]):
-            x = conv(x, edge_index, edge_weight, mask)
+            x = conv(x, edge_index, edge_weight)
             xs.append(x)
             if not (self.gns is None):
                 x = self.gns[layer](x)
             x = self.activation(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
-        x = self.convs[-1](x, edge_index, edge_weight, mask)
+        x = self.convs[-1](x, edge_index, edge_weight)
         xs.append(x)
 
         if self.jk:
@@ -344,9 +333,13 @@ class GLASS(nn.Module):
         return emb
 
     def Pool(self, emb, subG_node, pool):
+        graph_emb = torch.sum(emb, dim=0)
         batch, pos = pad2batch(subG_node)
         emb = emb[pos]
         emb = pool(emb, batch)
+        emb_comp_sum = []
+        all_graph_embs = [graph_emb] * len(subG_node)
+        comp_sum = torch.sub(graph_emb, emb)
         return emb
 
     def forward(self, x, edge_index, edge_weight, subG_node, z=None, id=0):
