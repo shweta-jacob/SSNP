@@ -79,8 +79,13 @@ def split():
     load and split dataset.
     '''
     # initialize and split dataset
-    global trn_dataset, val_dataset, tst_dataset
+    global trn_dataset, val_dataset, tst_dataset, baseG
     global max_deg, output_channels, loader_fn, tloader_fn
+    baseG = datasets.load_dataset(args.dataset)
+    if baseG.y.unique().shape[0] == 2:
+        baseG.y = baseG.y.to(torch.float)
+    else:
+        baseG.y = baseG.y.to(torch.int64)
     # initialize node features
     if args.use_deg:
         baseG.setDegreeFeature()
@@ -129,7 +134,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
         conv_layer: number of GLASSConv.
         pool: pooling function transfer node embeddings to subgraph embeddings.
         z_ratio: see GLASSConv in impl/model.py. Z_ratio in [0.5, 1].
-        aggr: aggregation method. mean, sum, or gcn. 
+        aggr: aggregation method. mean, sum, or gcn.
     '''
     conv = models.EmbZGConv(hidden_dim,
                             hidden_dim,
@@ -199,6 +204,7 @@ def test(pool="size",
     for repeat in range(args.repeat):
         set_seed((1 << repeat) - 1)
         print(f"repeat {repeat}")
+        split()
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio,
                          aggr)
         trn_loader = loader_fn(trn_dataset, batch_size)
