@@ -15,6 +15,8 @@ import time
 import random
 import yaml
 
+from impl.models import GLASS, GLASSConv
+
 parser = argparse.ArgumentParser(description='')
 # Dataset settings
 parser.add_argument('--dataset', type=str, default='ppi_bp')
@@ -149,7 +151,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
                             activation=nn.ELU(inplace=True),
                             jk=jk,
                             dropout=dropout,
-                            conv=functools.partial(GCNConv,
+                            conv=functools.partial(GLASSConv,
                                                    aggr=aggr,
                                                    z_ratio=z_ratio,
                                                    dropout=dropout),

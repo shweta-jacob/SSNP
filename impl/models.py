@@ -189,7 +189,7 @@ class EmbZGConv(nn.Module):
                  max_deg,
                  dropout=0,
                  activation=nn.ReLU(),
-                 conv=GCNConv,
+                 conv=GLASSConv,
                  gn=True,
                  jk=False,
                  **kwargs):
@@ -203,10 +203,14 @@ class EmbZGConv(nn.Module):
         for _ in range(num_layers - 1):
             self.convs.append(
                 conv(in_channels=hidden_channels,
-                     out_channels=hidden_channels))
+                     out_channels=hidden_channels,
+                     activation=activation,
+                     **kwargs))
         self.convs.append(
             conv(in_channels=hidden_channels,
-                 out_channels=output_channels))
+                 out_channels=output_channels,
+                 activation=activation,
+                 **kwargs))
         self.activation = activation
         self.dropout = dropout
         if gn:
@@ -233,6 +237,10 @@ class EmbZGConv(nn.Module):
                 gn.reset_parameters()
 
     def forward(self, x, edge_index, edge_weight, z=None):
+        # z is the node label.
+        if z is None:
+            mask = (torch.zeros(
+                (x.shape[0]), device=x.device) < 0.5).reshape(-1, 1)
         # convert integer input to vector node features.
         x = self.input_emb(x).reshape(x.shape[0], -1)
         x = self.emb_gn(x)
@@ -240,13 +248,13 @@ class EmbZGConv(nn.Module):
         x = F.dropout(x, p=self.dropout, training=self.training)
         # pass messages at each layer.
         for layer, conv in enumerate(self.convs[:-1]):
-            x = conv(x, edge_index, edge_weight)
+            x = conv(x, edge_index, edge_weight, mask)
             xs.append(x)
             if not (self.gns is None):
                 x = self.gns[layer](x)
             x = self.activation(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
-        x = self.convs[-1](x, edge_index, edge_weight)
+        x = self.convs[-1](x, edge_index, edge_weight, mask)
         xs.append(x)
 
         if self.jk:
