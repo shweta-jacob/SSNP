@@ -1,5 +1,5 @@
 aggr: gcn
-batch_size: 200
+batch_size: 59
 conv_layer: 3
 dropout: 0.5
 hidden_dim: 64
