@@ -345,25 +345,25 @@ class GLASS(nn.Module):
         if self.model_type == 0:
             batch, pos = pad2batch(subG_node)
             emb_subg = emb[pos]
-            emb = pool(emb_subg, batch)
+            emb = pool[0](emb_subg, batch)
         elif self.model_type == 1:
             batch_comp, pos_comp = pad2batch(comp_node)
             emb_comp = emb[pos_comp]
-            emb = pool(emb_comp, batch_comp)
+            emb = pool[1](emb_comp, batch_comp)
         else:
             batch, pos = pad2batch(subG_node)
             emb_subg = emb[pos]
-            emb_subg = pool(emb_subg, batch)
+            emb_subg = pool[0](emb_subg, batch)
             batch_comp, pos_comp = pad2batch(comp_node)
             emb_comp = emb[pos_comp]
-            emb_comp = pool(emb_comp, batch_comp)
+            emb_comp = pool[1](emb_comp, batch_comp)
             emb = torch.cat([emb_subg, emb_comp], dim=-1)
 
         return emb
 
     def forward(self, x, edge_index, edge_weight, subG_node, comp_node, z=None, id=0):
         emb = self.NodeEmb(x, edge_index, edge_weight, z)
-        emb = self.Pool(emb, subG_node, comp_node, self.pools[id])
+        emb = self.Pool(emb, subG_node, comp_node, self.pools)
         return self.preds[id](emb)
 
 

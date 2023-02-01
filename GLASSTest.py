@@ -134,7 +134,7 @@ def split():
             return SubGDataset.GDataloader(ds, bs, shuffle=True)
 
 
-def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
+def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr):
     '''
     Build a GLASS model.
     Args:
@@ -176,17 +176,19 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio, aggr):
         "sum": models.AddPool,
         "size": models.SizePool
     }
-    if pool in pool_fn_fn:
-        pool_fn1 = pool_fn_fn[pool]()
+    if pool1 in pool_fn_fn and pool2 in pool_fn_fn:
+        pool_fn1 = pool_fn_fn[pool1]()
+        pool_fn2 = pool_fn_fn[pool2]()
     else:
         raise NotImplementedError
 
     gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]),
-                       torch.nn.ModuleList([pool_fn1]), args.model).to(config.device)
+                       torch.nn.ModuleList([pool_fn1, pool_fn2]), args.model).to(config.device)
     return gnn
 
 
-def test(pool="size",
+def test(pool1="size",
+         pool2="size",
          aggr="mean",
          hidden_dim=64,
          conv_layer=8,
@@ -222,7 +224,7 @@ def test(pool="size",
         print(f"repeat {repeat}")
         start_pre = time.time()
         split()
-        gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool, z_ratio,
+        gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio,
                          aggr)
         trn_loader = loader_fn(trn_dataset, batch_size)
         val_loader = tloader_fn(val_dataset, batch_size)
@@ -321,7 +323,7 @@ def test(pool="size",
 
 print(args)
 # read configuration
-with open(f"config/{args.dataset}.yml") as f:
+with open(f"compl-config/{args.dataset}.yml") as f:
     params = yaml.safe_load(f)
 
 print("params", params, flush=True)
