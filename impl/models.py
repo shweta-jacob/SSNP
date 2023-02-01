@@ -189,7 +189,7 @@ class EmbZGConv(nn.Module):
                  max_deg,
                  dropout=0,
                  activation=nn.ReLU(),
-                 conv=GLASSConv,
+                 conv=GCNConv,
                  gn=True,
                  jk=False,
                  **kwargs):
@@ -203,14 +203,10 @@ class EmbZGConv(nn.Module):
         for _ in range(num_layers - 1):
             self.convs.append(
                 conv(in_channels=hidden_channels,
-                     out_channels=hidden_channels,
-                     activation=activation,
-                     **kwargs))
+                     out_channels=hidden_channels))
         self.convs.append(
             conv(in_channels=hidden_channels,
-                 out_channels=output_channels,
-                 activation=activation,
-                 **kwargs))
+                 out_channels=output_channels))
         self.activation = activation
         self.dropout = dropout
         if gn:
@@ -248,13 +244,13 @@ class EmbZGConv(nn.Module):
         x = F.dropout(x, p=self.dropout, training=self.training)
         # pass messages at each layer.
         for layer, conv in enumerate(self.convs[:-1]):
-            x = conv(x, edge_index, edge_weight, mask)
+            x = conv(x, edge_index, edge_weight)
             xs.append(x)
             if not (self.gns is None):
                 x = self.gns[layer](x)
             x = self.activation(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
-        x = self.convs[-1](x, edge_index, edge_weight, mask)
+        x = self.convs[-1](x, edge_index, edge_weight)
         xs.append(x)
 
         if self.jk:
@@ -330,6 +326,11 @@ class GLASS(nn.Module):
         self.preds = preds
         self.pools = pools
         self.model_type = model_type
+        self.comb_fns = nn.ModuleList([
+            nn.Linear(64*2, 64),
+            nn.Linear(64*2, 64)
+        ])
+        self.z_ratio = 0.95
 
     def NodeEmb(self, x, edge_index, edge_weight, z=None):
         embs = []
@@ -359,12 +360,19 @@ class GLASS(nn.Module):
             emb_comp = pool[1](emb_comp, batch_comp)
             emb = torch.cat([emb_subg, emb_comp], dim=-1)
 
-        return emb
+        return emb_subg, emb_comp
 
     def forward(self, x, edge_index, edge_weight, subG_node, comp_node, z=None, id=0):
         emb = self.NodeEmb(x, edge_index, edge_weight, z)
-        emb = self.Pool(emb, subG_node, comp_node, self.pools)
-        return self.preds[id](emb)
+        emb, comp = self.Pool(emb, subG_node, comp_node, self.pools)
+        x1 = self.comb_fns[1](emb)
+        x0 = self.comb_fns[0](comp)
+        # mix transformed feature.
+        mask = (torch.zeros(
+            (len(subG_node)), device=x.device) < 0.5).reshape(-1, 1)
+        x = torch.where(mask, self.z_ratio * x1 + (1 - self.z_ratio) * x0,
+                        self.z_ratio * x0 + (1 - self.z_ratio) * x1)
+        return self.preds[id](x)
 
 
 # models used for producing node embeddings.

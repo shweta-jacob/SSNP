@@ -151,7 +151,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
                             activation=nn.ELU(inplace=True),
                             jk=jk,
                             dropout=dropout,
-                            conv=functools.partial(GLASSConv,
+                            conv=functools.partial(GCNConv,
                                                    aggr=aggr,
                                                    z_ratio=z_ratio,
                                                    dropout=dropout),
@@ -167,7 +167,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
     num_rep = 1
     if args.model == 2:
         num_rep = 2
-    mlp = nn.Linear(hidden_dim * (conv_layer) * num_rep if jk else hidden_dim,
+    mlp = nn.Linear(64 if jk else hidden_dim,
                     output_channels)
 
     pool_fn_fn = {
@@ -219,6 +219,7 @@ def test(pool1="size",
     inference_time = []
     preproc_times = []
     for repeat in range(args.repeat):
+        seeds = [0, 1, 3, 7, 15, 31, 63, 127, 255, 511]
         start_time = time.time()
         set_seed((1 << repeat) - 1)
         print(f"repeat {repeat}")
@@ -278,7 +279,7 @@ def test(pool1="size",
                         flush=True)
                 else:
                     early_stop += 1
-                    if i % 10 == 0:
+                    if i % 1 == 0:
                         inf_start = time.time()
                         test = train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn)
                         inf_end = time.time()
