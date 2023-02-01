@@ -327,8 +327,8 @@ class GLASS(nn.Module):
         self.pools = pools
         self.model_type = model_type
         self.comb_fns = nn.ModuleList([
-            nn.Linear(64*2, 64),
-            nn.Linear(64*2, 64)
+            nn.Linear(64*3, 64),
+            nn.Linear(64*3, 64)
         ])
         self.z_ratio = 0.95
 
