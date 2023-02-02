@@ -1,4 +1,4 @@
-aggr: mean
+aggr: gcn
 batch_size: 80
 conv_layer: 2
 dropout: 0.5
