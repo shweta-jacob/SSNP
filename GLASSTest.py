@@ -209,7 +209,7 @@ def test(pool="size",
     preproc_times = []
     for repeat in range(args.repeat):
         start_time = time.time()
-        set_seed((1 << repeat) - 1)
+        set_seed(repeat + 1)
         print(f"repeat {repeat}")
         start_pre = time.time()
         split()
