@@ -107,9 +107,9 @@ def split():
     max_deg = torch.max(baseG.x)
     baseG.to(config.device)
     # split data
-    trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"), config.device)
-    val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"), config.device)
-    tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"), config.device)
+    trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
+    val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
+    tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
     # choice of dataloader
     if args.use_maxzeroone:
 
@@ -153,7 +153,6 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
                             dropout=dropout,
                             conv=functools.partial(GLASSConv,
                                                    aggr=aggr,
-                                                   z_ratio=z_ratio,
                                                    dropout=dropout),
                             gn=True)
 
@@ -232,9 +231,6 @@ def test(pool1="size",
         end_pre = time.time()
         preproc_times.append(end_pre - start_pre)
         optimizer = Adam(gnn.parameters(), lr=lr)
-        scd = lr_scheduler.ReduceLROnPlateau(optimizer,
-                                             factor=resi,
-                                             min_lr=5e-5)
         val_score = 0
         tst_score = 0
         early_stop = 0
@@ -242,7 +238,6 @@ def test(pool1="size",
             t1 = time.time()
             trn_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn)
             trn_time.append(time.time() - t1)
-            scd.step(loss)
 
             if i >= 0:
                 score, _ = train.test(gnn,
