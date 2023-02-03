@@ -1,4 +1,4 @@
-aggr: sum
+aggr: gcn
 batch_size: 200
 conv_layer: 1
 dropout: 0.0
