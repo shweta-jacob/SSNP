@@ -108,7 +108,7 @@ def split():
         raise NotImplementedError
 
     max_deg = torch.max(baseG.x)
-    baseG.to(config.device)
+    # baseG.to(config.device)
     # split data
     trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
@@ -174,6 +174,9 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
     training = sign(trn_dataset)
     val = sign(val_dataset)
     testing = sign(tst_dataset)
+    training.to(config.device)
+    val.to(config.device)
+    testing.to(config.device)
 
     num_rep = 1
     if args.model == 2:
