@@ -1,10 +1,36 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv, global_max_pool, global_mean_pool, global_add_pool
+from torch_geometric.data import Data
+from torch_sparse import SparseTensor
+
+from torch_geometric.nn import GCNConv, global_max_pool, global_mean_pool, global_add_pool, MLP
 from torch_geometric.nn.norm import GraphNorm, GraphSizeNorm
+from torch_geometric.transforms import SIGN
+
 from .utils import pad2batch
 
+
+class MySIGN(SIGN):
+
+    def __call__(self, data: Data) -> Data:
+        assert data.edge_index is not None
+        row, col = data.edge_index
+        adj_t = SparseTensor(row=col, col=row,
+                             sparse_sizes=(data.num_nodes, data.num_nodes))
+
+        deg = adj_t.sum(dim=1).to(torch.float)
+        deg_inv_sqrt = deg.pow(-0.5)
+        deg_inv_sqrt[deg_inv_sqrt == float('inf')] = 0
+        adj_t = deg_inv_sqrt.view(-1, 1) * adj_t * deg_inv_sqrt.view(1, -1)
+
+        assert data.x is not None
+        xs = [data.x]
+        for i in range(1, self.K + 1):
+            xs += [adj_t @ xs[-1]]
+        setattr(data, f'x', torch.cat(xs, dim=-1))
+
+        return data
 
 class Seq(nn.Module):
     ''' 
@@ -23,60 +49,60 @@ class Seq(nn.Module):
         return out
 
 
-class MLP(nn.Module):
-    '''
-    Multi-Layer Perception.
-    Args:
-        tail_activation: whether to use activation function at the last layer.
-        activation: activation function.
-        gn: whether to use GraphNorm layer.
-    '''
-    def __init__(self,
-                 input_channels: int,
-                 hidden_channels: int,
-                 output_channels: int,
-                 num_layers: int,
-                 dropout=0,
-                 tail_activation=False,
-                 activation=nn.ReLU(inplace=True),
-                 gn=False):
-        super().__init__()
-        modlist = []
-        self.seq = None
-        if num_layers == 1:
-            modlist.append(nn.Linear(input_channels, output_channels))
-            if tail_activation:
-                if gn:
-                    modlist.append(GraphNorm(output_channels))
-                if dropout > 0:
-                    modlist.append(nn.Dropout(p=dropout, inplace=True))
-                modlist.append(activation)
-            self.seq = Seq(modlist)
-        else:
-            modlist.append(nn.Linear(input_channels, hidden_channels))
-            for _ in range(num_layers - 2):
-                if gn:
-                    modlist.append(GraphNorm(hidden_channels))
-                if dropout > 0:
-                    modlist.append(nn.Dropout(p=dropout, inplace=True))
-                modlist.append(activation)
-                modlist.append(nn.Linear(hidden_channels, hidden_channels))
-            if gn:
-                modlist.append(GraphNorm(hidden_channels))
-            if dropout > 0:
-                modlist.append(nn.Dropout(p=dropout, inplace=True))
-            modlist.append(activation)
-            modlist.append(nn.Linear(hidden_channels, output_channels))
-            if tail_activation:
-                if gn:
-                    modlist.append(GraphNorm(output_channels))
-                if dropout > 0:
-                    modlist.append(nn.Dropout(p=dropout, inplace=True))
-                modlist.append(activation)
-            self.seq = Seq(modlist)
-
-    def forward(self, x):
-        return self.seq(x)
+# class MLP(nn.Module):
+#     '''
+#     Multi-Layer Perception.
+#     Args:
+#         tail_activation: whether to use activation function at the last layer.
+#         activation: activation function.
+#         gn: whether to use GraphNorm layer.
+#     '''
+#     def __init__(self,
+#                  input_channels: int,
+#                  hidden_channels: int,
+#                  output_channels: int,
+#                  num_layers: int,
+#                  dropout=0,
+#                  tail_activation=False,
+#                  activation=nn.ReLU(inplace=True),
+#                  gn=False):
+#         super().__init__()
+#         modlist = []
+#         self.seq = None
+#         if num_layers == 1:
+#             modlist.append(nn.Linear(input_channels, output_channels))
+#             if tail_activation:
+#                 if gn:
+#                     modlist.append(GraphNorm(output_channels))
+#                 if dropout > 0:
+#                     modlist.append(nn.Dropout(p=dropout, inplace=True))
+#                 modlist.append(activation)
+#             self.seq = Seq(modlist)
+#         else:
+#             modlist.append(nn.Linear(input_channels, hidden_channels))
+#             for _ in range(num_layers - 2):
+#                 if gn:
+#                     modlist.append(GraphNorm(hidden_channels))
+#                 if dropout > 0:
+#                     modlist.append(nn.Dropout(p=dropout, inplace=True))
+#                 modlist.append(activation)
+#                 modlist.append(nn.Linear(hidden_channels, hidden_channels))
+#             if gn:
+#                 modlist.append(GraphNorm(hidden_channels))
+#             if dropout > 0:
+#                 modlist.append(nn.Dropout(p=dropout, inplace=True))
+#             modlist.append(activation)
+#             modlist.append(nn.Linear(hidden_channels, output_channels))
+#             if tail_activation:
+#                 if gn:
+#                     modlist.append(GraphNorm(output_channels))
+#                 if dropout > 0:
+#                     modlist.append(nn.Dropout(p=dropout, inplace=True))
+#                 modlist.append(activation)
+#             self.seq = Seq(modlist)
+#
+#     def forward(self, x):
+#         return self.seq(x)
 
 
 def buildAdj(edge_index, edge_weight, n_node: int, aggr: str):
@@ -210,31 +236,33 @@ class EmbZGConv(nn.Module):
 
     def forward(self, x, edge_index, edge_weight):
         # convert integer input to vector node features.
-        x = self.input_emb(x).reshape(x.shape[0], -1)
-        x = self.emb_gn(x)
-        xs = []
-        x = F.dropout(x, p=self.dropout, training=self.training)
-        # pass messages at each layer.
-        for layer, conv in enumerate(self.convs[:-1]):
-            x = conv(x, edge_index, edge_weight)
-            xs.append(x)
-            if not (self.gns is None):
-                x = self.gns[layer](x)
-            x = self.activation(x)
-            x = F.dropout(x, p=self.dropout, training=self.training)
-        x = self.convs[-1](x, edge_index, edge_weight)
-        xs.append(x)
-
-        if self.jk:
-            x = torch.cat(xs, dim=-1)
-            if not (self.gns is None):
-                x = self.gns[-1](x)
-            return x
-        else:
-            x = xs[-1]
-            if not (self.gns is None):
-                x = self.gns[-1](x)
-            return x
+        # x = self.input_emb(x).reshape(x.shape[0], -1)
+        # x = self.emb_gn(x)
+        # xs = []
+        # x = F.dropout(x, p=self.dropout, training=self.training)
+        # # pass messages at each layer.
+        # for layer, conv in enumerate(self.convs[:-1]):
+        #     x = conv(x, edge_index, edge_weight)
+        #     xs.append(x)
+        #     if not (self.gns is None):
+        #         x = self.gns[layer](x)
+        #     x = self.activation(x)
+        #     x = F.dropout(x, p=self.dropout, training=self.training)
+        # x = self.convs[-1](x, edge_index, edge_weight)
+        # xs.append(x)
+        #
+        # if self.jk:
+        #     x = torch.cat(xs, dim=-1)
+        #     if not (self.gns is None):
+        #         x = self.gns[-1](x)
+        #     return x
+        # else:
+        #     x = xs[-1]
+        #     if not (self.gns is None):
+        #         x = self.gns[-1](x)
+        #     return x
+        # x = torch.cat(xs, dim=-1)
+        return x
 
 
 class PoolModule(nn.Module):
@@ -295,18 +323,21 @@ class GLASS(nn.Module):
                  pools: nn.ModuleList, model_type):
         super().__init__()
         self.conv = conv
+        self.operator_diff = MLP(channel_list=[64*3, 64, 64],
+              act_first=True, act="ELU", dropout=[0.5, 0.5])
         self.preds = preds
         self.pools = pools
         self.model_type = model_type
 
     def NodeEmb(self, x, edge_index, edge_weight):
-        embs = []
-        for _ in range(x.shape[1]):
-            emb = self.conv(x[:, _, :].reshape(x.shape[0], x.shape[-1]),
-                            edge_index, edge_weight)
-            embs.append(emb.reshape(emb.shape[0], 1, emb.shape[-1]))
-        emb = torch.cat(embs, dim=1)
-        emb = torch.mean(emb, dim=1)
+        # embs = []
+        # for _ in range(x.shape[1]):
+        #     emb = self.conv(x[:, _, :].reshape(x.shape[0], x.shape[-1]),
+        #                     edge_index, edge_weight)
+        #     embs.append(emb.reshape(emb.shape[0], 1, emb.shape[-1]))
+        # emb = torch.cat(embs, dim=1)
+        # emb = torch.mean(emb, dim=1)
+        emb = self.operator_diff(x)
         return emb
 
     def Pool(self, emb, subG_node, pool):

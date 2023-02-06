@@ -10,11 +10,14 @@ import torch.nn as nn
 import yaml
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 from torch.optim import Adam
-from torch_geometric.nn import MLP
+from torch_geometric.data import Data
+from torch_geometric.nn import MLP, SGConv
+from torch_geometric.transforms import SIGN
+
 
 import datasets
 from impl import models, SubGDataset, train, metrics, utils, config
-from impl.models import GLASSConv
+from impl.models import GLASSConv, MySIGN
 
 parser = argparse.ArgumentParser(description='')
 # Dataset settings
@@ -33,6 +36,7 @@ parser.add_argument('--use_maxzeroone', action='store_true')
 parser.add_argument('--repeat', type=int, default=1)
 parser.add_argument('--device', type=int, default=0)
 parser.add_argument('--use_seed', action='store_true')
+parser.add_argument('--K', type=int, default=2)
 
 args = parser.parse_args()
 config.set_device(args.device)
@@ -55,7 +59,7 @@ if args.use_seed:
 
 baseG = datasets.load_dataset(args.dataset)
 
-trn_dataset, val_dataset, tst_dataset = None, None, None
+trn_dataset, val_dataset, tst_dataset, training, val, testing = None, None, None, None, None, None
 max_deg, output_channels = 0, 1
 score_fn = None
 
@@ -143,6 +147,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         z_ratio: see GLASSConv in impl/model.py. Z_ratio in [0.5, 1].
         aggr: aggregation method. mean, sum, or gcn.
     '''
+    global training, val, testing
     conv = models.EmbZGConv(hidden_dim,
                             hidden_dim,
                             conv_layer,
@@ -161,13 +166,21 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         emb = torch.load(f"./Emb/{args.dataset}_{hidden_dim}.pt",
                          map_location=torch.device('cpu')).detach()
         conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
+        trn_dataset.x = emb
+        val_dataset.x = emb
+        tst_dataset.x = emb
+
+    sign = MySIGN(K=args.K)
+    training = sign(trn_dataset)
+    val = sign(val_dataset)
+    testing = sign(tst_dataset)
 
     num_rep = 1
     if args.model == 2:
         num_rep = 2
-    in_channels = hidden_dim * (conv_layer) * num_rep if jk else hidden_dim
-    mlp = MLP(channel_list=[in_channels, output_channels],
-              act_first=True, act ="ELU", dropout=[0.25])
+    in_channels = hidden_dim * num_rep if jk else hidden_dim
+    mlp = MLP(channel_list=[in_channels, hidden_dim, output_channels],
+              act_first=True, act="ELU", dropout=[0.5, 0.5])
     # mlp = nn.Linear(hidden_dim * (conv_layer) * num_rep if jk else hidden_dim,
     #                 output_channels)
 
@@ -230,9 +243,9 @@ def test(pool1="size",
         split()
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio,
                          aggr)
-        trn_loader = loader_fn(trn_dataset, batch_size)
-        val_loader = tloader_fn(val_dataset, batch_size)
-        tst_loader = tloader_fn(tst_dataset, batch_size)
+        trn_loader = loader_fn(training, batch_size)
+        val_loader = tloader_fn(val, batch_size)
+        tst_loader = tloader_fn(testing, batch_size)
         end_pre = time.time()
         preproc_times.append(end_pre - start_pre)
         optimizer = Adam(gnn.parameters(), lr=lr)
