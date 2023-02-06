@@ -1,20 +1,26 @@
 import torch
 
 
-def train(optimizer, model, dataloader, loss_fn):
+def train(optimizer, model, dataloader, metrics, loss_fn):
     '''
     Train models in an epoch.
     '''
     model.train()
     total_loss = []
+    ys = []
+    preds = []
     for batch in dataloader:
         optimizer.zero_grad()
         pred = model(*batch[:-1], id=0)
         loss = loss_fn(pred, batch[-1])
+        preds.append(pred)
+        ys.append(batch[-1])
         loss.backward()
         total_loss.append(loss.detach().item())
         optimizer.step()
-    return sum(total_loss) / len(total_loss)
+    pred = torch.cat(preds, dim=0)
+    y = torch.cat(ys, dim=0)
+    return metrics(pred.detach().cpu().numpy(), y.detach().cpu().numpy()), sum(total_loss) / len(total_loss)
 
 
 @torch.no_grad()

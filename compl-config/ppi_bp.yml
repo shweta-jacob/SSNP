@@ -1,0 +1,10 @@
+aggr: gcn
+batch_size: 80
+conv_layer: 3
+dropout: 0.5
+hidden_dim: 64
+lr: 0.0005
+pool1: sum
+pool2: sum
+resi: 0.2
+z_ratio: 0.95

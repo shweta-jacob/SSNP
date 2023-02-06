@@ -1,9 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
+from torch_geometric.nn import GCNConv, global_max_pool, global_mean_pool, global_add_pool
 from torch_geometric.nn.norm import GraphNorm, GraphSizeNorm
-from torch_geometric.nn.glob.glob import global_mean_pool, global_add_pool, global_max_pool
 from .utils import pad2batch
 
 
@@ -124,53 +123,25 @@ class GLASSConv(torch.nn.Module):
                  out_channels: int,
                  activation=nn.ReLU(inplace=True),
                  aggr="mean",
-                 z_ratio=0.8,
                  dropout=0.2):
         super().__init__()
-        self.trans_fns = nn.ModuleList([
-            nn.Linear(in_channels, out_channels),
-            nn.Linear(in_channels, out_channels)
-        ])
-        self.comb_fns = nn.ModuleList([
-            nn.Linear(in_channels + out_channels, out_channels),
-            nn.Linear(in_channels + out_channels, out_channels)
-        ])
         self.adj = torch.sparse_coo_tensor(size=(0, 0))
         self.activation = activation
         self.aggr = aggr
         self.gn = GraphNorm(out_channels)
-        self.z_ratio = z_ratio
         self.reset_parameters()
         self.dropout = dropout
 
     def reset_parameters(self):
-        for _ in self.trans_fns:
-            _.reset_parameters()
-        for _ in self.comb_fns:
-            _.reset_parameters()
         self.gn.reset_parameters()
 
-    def forward(self, x_, edge_index, edge_weight, mask):
+    def forward(self, x_, edge_index, edge_weight):
         if self.adj.shape[0] == 0:
             n_node = x_.shape[0]
             self.adj = buildAdj(edge_index, edge_weight, n_node, self.aggr)
-        # transform node features with different parameters individually.
-        x1 = self.activation(self.trans_fns[1](x_))
-        x0 = self.activation(self.trans_fns[0](x_))
-        # mix transformed feature.
-        x = torch.where(mask, self.z_ratio * x1 + (1 - self.z_ratio) * x0,
-                        self.z_ratio * x0 + (1 - self.z_ratio) * x1)
-        # pass messages.
-        x = self.adj @ x
+        x = self.adj @ x_
         x = self.gn(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
-        x = torch.cat((x, x_), dim=-1)
-        # transform node features with different parameters individually.
-        x1 = self.comb_fns[1](x)
-        x0 = self.comb_fns[0](x)
-        # mix transformed feature.
-        x = torch.where(mask, self.z_ratio * x1 + (1 - self.z_ratio) * x0,
-                        self.z_ratio * x0 + (1 - self.z_ratio) * x1)
         return x
 
 
@@ -237,13 +208,7 @@ class EmbZGConv(nn.Module):
             for gn in self.gns:
                 gn.reset_parameters()
 
-    def forward(self, x, edge_index, edge_weight, z=None):
-        # z is the node label.
-        if z is None:
-            mask = (torch.zeros(
-                (x.shape[0]), device=x.device) < 0.5).reshape(-1, 1)
-        else:
-            mask = (z > 0.5).reshape(-1, 1)
+    def forward(self, x, edge_index, edge_weight):
         # convert integer input to vector node features.
         x = self.input_emb(x).reshape(x.shape[0], -1)
         x = self.emb_gn(x)
@@ -251,13 +216,13 @@ class EmbZGConv(nn.Module):
         x = F.dropout(x, p=self.dropout, training=self.training)
         # pass messages at each layer.
         for layer, conv in enumerate(self.convs[:-1]):
-            x = conv(x, edge_index, edge_weight, mask)
+            x = conv(x, edge_index, edge_weight)
             xs.append(x)
             if not (self.gns is None):
                 x = self.gns[layer](x)
             x = self.activation(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
-        x = self.convs[-1](x, edge_index, edge_weight, mask)
+        x = self.convs[-1](x, edge_index, edge_weight)
         xs.append(x)
 
         if self.jk:
@@ -327,31 +292,49 @@ class GLASS(nn.Module):
         preds[id] and pools[id] is used to predict the id-th target. Can be used for SSL.
     '''
     def __init__(self, conv: EmbZGConv, preds: nn.ModuleList,
-                 pools: nn.ModuleList):
+                 pools: nn.ModuleList, model_type):
         super().__init__()
         self.conv = conv
         self.preds = preds
         self.pools = pools
+        self.model_type = model_type
 
-    def NodeEmb(self, x, edge_index, edge_weight, z=None):
+    def NodeEmb(self, x, edge_index, edge_weight):
         embs = []
         for _ in range(x.shape[1]):
             emb = self.conv(x[:, _, :].reshape(x.shape[0], x.shape[-1]),
-                            edge_index, edge_weight, z)
+                            edge_index, edge_weight)
             embs.append(emb.reshape(emb.shape[0], 1, emb.shape[-1]))
         emb = torch.cat(embs, dim=1)
         emb = torch.mean(emb, dim=1)
         return emb
 
     def Pool(self, emb, subG_node, pool):
-        batch, pos = pad2batch(subG_node)
-        emb = emb[pos]
-        emb = pool(emb, batch)
+        if self.model_type == 0:
+            batch, pos = pad2batch(subG_node)
+            emb_subg = emb[pos]
+            emb = pool[0](emb_subg, batch)
+        elif self.model_type == 1:
+            graph_emb = torch.sum(emb, dim=0)
+            all_graph_embs = graph_emb.repeat(len(subG_node), 1)
+            batch, pos = pad2batch(subG_node)
+            emb_subg = emb[pos]
+            emb_subg = pool[0](emb_subg, batch)
+            emb = torch.sub(all_graph_embs, emb_subg)
+        else:
+            graph_emb = torch.sum(emb, dim=0)
+            all_graph_embs = graph_emb.repeat(len(subG_node), 1)
+            batch, pos = pad2batch(subG_node)
+            emb_subg = emb[pos]
+            emb_subg = pool[0](emb_subg, batch)
+            emb_comp = torch.sub(all_graph_embs, emb_subg)
+            emb = torch.cat([emb_subg, emb_comp], dim=-1)
+
         return emb
 
-    def forward(self, x, edge_index, edge_weight, subG_node, z=None, id=0):
-        emb = self.NodeEmb(x, edge_index, edge_weight, z)
-        emb = self.Pool(emb, subG_node, self.pools[id])
+    def forward(self, x, edge_index, edge_weight, subG_node, id=0):
+        emb = self.NodeEmb(x, edge_index, edge_weight)
+        emb = self.Pool(emb, subG_node, self.pools)
         return self.preds[id](emb)
 
 

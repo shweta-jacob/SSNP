@@ -1,3 +1,4 @@
+from torch.nn.utils.rnn import pad_sequence
 from torch_geometric.data import Data
 import torch
 from torch.utils.data import DataLoader
