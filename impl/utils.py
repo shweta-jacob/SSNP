@@ -1,5 +1,15 @@
+import networkx as nx
+import torch_geometric
+from matplotlib import pyplot as plt
 from torch.nn.utils.rnn import pad_sequence
 import torch
+import random
+import scipy.sparse as ssp
+from tqdm import tqdm
+
+from torch_geometric.data import Data
+from torch_geometric.utils import to_networkx
+from torch_geometric.utils import k_hop_subgraph as org_k_hop_subgraph
 
 
 def batch2pad(batch):
@@ -43,3 +53,155 @@ def MaxZOZ(x, pos):
     tpos = pos[pos >= 0].to(z.device)
     z[tpos] = 1
     return z
+
+
+def draw_graph(graph):
+    # helps draw a graph object and save it as a png file
+    f = plt.figure(1, figsize=(48, 48))
+    nx.draw(graph, with_labels=True, pos=nx.spring_layout(graph))
+    plt.show()  # check if same as in the doc visually
+    f.savefig("input_graph.pdf", bbox_inches='tight')
+
+def neighbors(fringe, A, outgoing=True):
+    # Find all 1-hop neighbors of nodes in fringe from graph A,
+    # where A is a scipy csr adjacency matrix.
+    # If outgoing=True, find neighbors with outgoing edges;
+    # otherwise, find neighbors with incoming edges (you should
+    # provide a csc matrix in this case).
+    if outgoing:
+        res = set(A[list(fringe)].indices)
+    else:
+        res = set(A[:, list(fringe)].indices)
+
+    return res
+
+def k_hop_subgraph(center, num_hops, A, sample_ratio=1.0,
+                   max_nodes_per_hop=None, node_features=None,
+                   y=1, directed=False, A_csc=None, rw_kwargs=None):
+    debug = False  # set True manually to debug using matplotlib and gephi
+    # Extract the k-hop enclosing subgraph around link (src, dst) from A.
+    if not rw_kwargs:
+        nodes = center
+        dists = [0, 0]
+        visited = set(center)
+        fringe = set(center)
+        for dist in range(1, num_hops + 1):
+            if not directed:
+                fringe = neighbors(fringe, A)
+            else:
+                out_neighbors = neighbors(fringe, A)
+                in_neighbors = neighbors(fringe, A_csc, False)
+                fringe = out_neighbors.union(in_neighbors)
+            fringe = fringe - visited
+            visited = visited.union(fringe)
+            if sample_ratio < 1.0:
+                fringe = random.sample(fringe, int(sample_ratio * len(fringe)))
+            if max_nodes_per_hop is not None:
+                if max_nodes_per_hop < len(fringe):
+                    fringe = random.sample(fringe, max_nodes_per_hop)
+            if len(fringe) == 0:
+                break
+            nodes = nodes + list(fringe)
+            dists = dists + [dist] * len(fringe)
+
+        subgraph = A[nodes, :][:, nodes]
+
+        # Remove target link between the subgraph.
+        # subgraph[0, 1] = 0
+        # subgraph[1, 0] = 0
+
+        if node_features is not None:
+            node_features = node_features[nodes]
+
+        return nodes, subgraph, dists, node_features, y
+    else:
+        # Start of core-logic for S.C.A.L.E.D.
+        rw_m = rw_kwargs['rw_m']
+        rw_M = rw_kwargs['rw_M']
+        sparse_adj = rw_kwargs['sparse_adj']
+        edge_index = rw_kwargs['edge_index']
+        device = rw_kwargs['device']
+        data_org = rw_kwargs['data']
+
+        if rw_kwargs.get('unique_nodes'):
+            nodes = rw_kwargs.get('unique_nodes')[(center)]
+        else:
+            row, col, _ = sparse_adj.csr()
+            starting_nodes = torch.tensor(center, dtype=torch.long, device=device)
+            start = starting_nodes.repeat(rw_M)
+            rw = torch.ops.torch_cluster.random_walk(row, col, start, rw_m, 1, 1)[0]
+            if debug:
+                from networkx import write_gexf
+                draw_graph(to_networkx(data_org))
+                write_gexf(torch_geometric.utils.to_networkx(data_org), path='gephi.gexf')
+            nodes = torch.unique(rw.flatten()).tolist()
+
+        rw_set = nodes
+        # import torch_geometric
+        # edge_index_new, edge_attr_new = torch_geometric.utils.subgraph(subset=rw_set, edge_index=edge_index,
+        #                                                                relabel_nodes=True)
+        # subgraph api is same as org_k_hop_subgraph
+
+        sub_nodes, sub_edge_index, mapping, _ = org_k_hop_subgraph(rw_set, 0, edge_index, relabel_nodes=True,
+                                                                   num_nodes=data_org.num_nodes)
+
+        # src_index = rw_set.index(src)
+        # dst_index = rw_set.index(dst)
+        # mapping_list = mapping.tolist()
+        # src, dst = mapping_list[src_index], mapping_list[dst_index]
+        # Remove target link from the subgraph.
+        # mask1 = (sub_edge_index[0] != src) | (sub_edge_index[1] != dst)
+        # mask2 = (sub_edge_index[0] != dst) | (sub_edge_index[1] != src)
+        # sub_edge_index_revised = sub_edge_index[:, mask1 & mask2]
+
+
+        y = torch.tensor([y], dtype=torch.int)
+        x = data_org.x[sub_nodes] if hasattr(data_org.x, 'size') else None
+        # Calculate node labeling.
+        z_revised = torch.ones(x.shape[0])
+        data_revised = Data(x=x, z=z_revised,
+                            edge_index=sub_edge_index, y=y, node_id=torch.LongTensor(rw_set),
+                            num_nodes=len(rw_set), edge_weight=torch.ones(sub_edge_index.shape[-1]))
+        # end of core-logic for S.C.A.L.E.D.
+        return data_revised
+
+def construct_pyg_graph(node_ids, adj, dists, node_features, y, node_label='drnl'):
+    # Construct a pytorch_geometric graph from a scipy csr adjacency matrix.
+    u, v, r = ssp.find(adj)
+    num_nodes = adj.shape[0]
+
+    node_ids = torch.LongTensor(node_ids)
+    u, v = torch.LongTensor(u), torch.LongTensor(v)
+    r = torch.LongTensor(r)
+    edge_index = torch.stack([u, v], 0)
+    edge_weight = r.to(torch.float)
+    y = torch.tensor([y])
+    if node_label == 'zo':  # zero-one labeling trick
+        z = (torch.tensor(dists) == 0).to(torch.long)
+    data = Data(node_features, edge_index, edge_weight=edge_weight, y=y, z=z,
+                node_id=node_ids, num_nodes=num_nodes)
+    return data
+
+def extract_enclosing_subgraphs(pos, A, x, y, num_hops, node_label='zo',
+                                ratio_per_hop=1.0, max_nodes_per_hop=None,
+                                directed=False, A_csc=None, rw_kwargs=None):
+    # Extract enclosing subgraphs from A for all links in link_index.
+    data_list = []
+
+    for center in tqdm(pos.tolist()):
+        if not rw_kwargs['rw_m']:
+            tmp = k_hop_subgraph(center, num_hops, A, ratio_per_hop,
+                                 max_nodes_per_hop, node_features=x, y=y,
+                                 directed=directed, A_csc=A_csc)
+
+            data = construct_pyg_graph(*tmp, node_label)
+        else:
+            data = k_hop_subgraph(center, num_hops, A, ratio_per_hop,
+                                  max_nodes_per_hop, node_features=x, y=y,
+                                  directed=directed, A_csc=A_csc, rw_kwargs=rw_kwargs)
+        draw = False
+        if draw:
+            draw_graph(to_networkx(data))
+        data_list.append(data)
+
+    return data_list
