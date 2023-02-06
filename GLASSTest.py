@@ -280,6 +280,7 @@ def test(pool1="size",
                     print(
                         f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {val_score:.4f} tst {tst_score:.4f}",
                         flush=True)
+                    print(f"Best picked so far- val {val_score:.4f} tst {tst_score:.4f}")
                 elif score >= val_score - 1e-5:
                     inf_start = time.time()
                     score, _ = train.test(gnn,
@@ -292,6 +293,7 @@ def test(pool1="size",
                     print(
                         f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {val_score:.4f} tst {score:.4f}",
                         flush=True)
+                    print(f"Best picked so far- val {val_score:.4f} tst {tst_score:.4f}")
                 else:
                     early_stop += 1
                     if i % 10 == 0:
@@ -302,6 +304,7 @@ def test(pool1="size",
                         print(
                             f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {score:.4f} tst {test[0]:.4f}",
                             flush=True)
+                        print(f"Best picked so far- val {val_score:.4f} tst {tst_score:.4f}")
             if val_score >= 1 - 1e-5:
                 early_stop += 1
             # if early_stop > 100 / num_div:
