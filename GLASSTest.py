@@ -1,21 +1,20 @@
-import json
-
-from torch_geometric.nn import GCNConv
-
-from impl import models, SubGDataset, train, metrics, utils, config
-import datasets
-import torch
-from torch.optim import Adam, lr_scheduler
-from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 import argparse
-import torch.nn as nn
 import functools
-import numpy as np
-import time
+import json
 import random
-import yaml
+import time
 
-from impl.models import GLASS, GLASSConv
+import numpy as np
+import torch
+import torch.nn as nn
+import yaml
+from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
+from torch.optim import Adam
+from torch_geometric.nn import MLP
+
+import datasets
+from impl import models, SubGDataset, train, metrics, utils, config
+from impl.models import GLASSConv
 
 parser = argparse.ArgumentParser(description='')
 # Dataset settings
@@ -166,8 +165,11 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
     num_rep = 1
     if args.model == 2:
         num_rep = 2
-    mlp = nn.Linear(hidden_dim * (conv_layer) * num_rep if jk else hidden_dim,
-                    output_channels)
+    in_channels = hidden_dim * (conv_layer) * num_rep if jk else hidden_dim
+    mlp = MLP(channel_list=[in_channels, output_channels],
+              act_first=True, act ="ELU", dropout=[0.25])
+    # mlp = nn.Linear(hidden_dim * (conv_layer) * num_rep if jk else hidden_dim,
+    #                 output_channels)
 
     pool_fn_fn = {
         "mean": models.MeanPool,
@@ -183,6 +185,9 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
 
     gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]),
                        torch.nn.ModuleList([pool_fn1, pool_fn2]), args.model).to(config.device)
+    parameters = list(gnn.parameters())
+    total_params = sum(p.numel() for param in parameters for p in param)
+    print(f'Total number of parameters is {total_params}')
     return gnn
 
 
