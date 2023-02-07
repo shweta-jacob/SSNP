@@ -106,9 +106,9 @@ def split():
     max_deg = torch.max(baseG.x)
     baseG.to(config.device)
     # split data
-    trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
-    val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
-    tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
+    trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"), config.device)
+    val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"), config.device)
+    tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"), config.device)
     # choice of dataloader
     if args.use_maxzeroone:
 
@@ -152,6 +152,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
                             dropout=dropout,
                             conv=functools.partial(GLASSConv,
                                                    aggr=aggr,
+                                                   z_ratio=z_ratio,
                                                    dropout=dropout),
                             gn=True)
 

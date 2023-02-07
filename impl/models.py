@@ -123,25 +123,53 @@ class GLASSConv(torch.nn.Module):
                  out_channels: int,
                  activation=nn.ReLU(inplace=True),
                  aggr="mean",
+                 z_ratio=0.8,
                  dropout=0.2):
         super().__init__()
+        self.trans_fns = nn.ModuleList([
+            nn.Linear(in_channels, out_channels),
+            nn.Linear(in_channels, out_channels)
+        ])
+        self.comb_fns = nn.ModuleList([
+            nn.Linear(in_channels + out_channels, out_channels),
+            nn.Linear(in_channels + out_channels, out_channels)
+        ])
         self.adj = torch.sparse_coo_tensor(size=(0, 0))
         self.activation = activation
         self.aggr = aggr
         self.gn = GraphNorm(out_channels)
+        self.z_ratio = z_ratio
         self.reset_parameters()
         self.dropout = dropout
 
     def reset_parameters(self):
+        for _ in self.trans_fns:
+            _.reset_parameters()
+        for _ in self.comb_fns:
+            _.reset_parameters()
         self.gn.reset_parameters()
 
-    def forward(self, x_, edge_index, edge_weight):
+    def forward(self, x_, edge_index, edge_weight, mask):
         if self.adj.shape[0] == 0:
             n_node = x_.shape[0]
             self.adj = buildAdj(edge_index, edge_weight, n_node, self.aggr)
-        x = self.adj @ x_
+        # transform node features with different parameters individually.
+        x1 = self.activation(self.trans_fns[1](x_))
+        x0 = self.activation(self.trans_fns[0](x_))
+        # mix transformed feature.
+        x = torch.where(mask, self.z_ratio * x1 + (1 - self.z_ratio) * x0,
+                        self.z_ratio * x0 + (1 - self.z_ratio) * x1)
+        # pass messages.
+        x = self.adj @ x
         x = self.gn(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
+        x = torch.cat((x, x_), dim=-1)
+        # transform node features with different parameters individually.
+        x1 = self.comb_fns[1](x)
+        x0 = self.comb_fns[0](x)
+        # mix transformed feature.
+        x = torch.where(mask, self.z_ratio * x1 + (1 - self.z_ratio) * x0,
+                        self.z_ratio * x0 + (1 - self.z_ratio) * x1)
         return x
 
 
@@ -208,7 +236,11 @@ class EmbZGConv(nn.Module):
             for gn in self.gns:
                 gn.reset_parameters()
 
-    def forward(self, x, edge_index, edge_weight):
+    def forward(self, x, edge_index, edge_weight, z=None):
+        # z is the node label.
+        if z is None:
+            mask = (torch.zeros(
+                (x.shape[0]), device=x.device) < 0.5).reshape(-1, 1)
         # convert integer input to vector node features.
         x = self.input_emb(x).reshape(x.shape[0], -1)
         x = self.emb_gn(x)
@@ -216,13 +248,13 @@ class EmbZGConv(nn.Module):
         x = F.dropout(x, p=self.dropout, training=self.training)
         # pass messages at each layer.
         for layer, conv in enumerate(self.convs[:-1]):
-            x = conv(x, edge_index, edge_weight)
+            x = conv(x, edge_index, edge_weight, mask)
             xs.append(x)
             if not (self.gns is None):
                 x = self.gns[layer](x)
             x = self.activation(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
-        x = self.convs[-1](x, edge_index, edge_weight)
+        x = self.convs[-1](x, edge_index, edge_weight, mask)
         xs.append(x)
 
         if self.jk:
@@ -309,32 +341,29 @@ class GLASS(nn.Module):
         emb = torch.mean(emb, dim=1)
         return emb
 
-    def Pool(self, emb, subG_node, pool):
+    def Pool(self, emb, subG_node, comp_node, pool):
         if self.model_type == 0:
             batch, pos = pad2batch(subG_node)
             emb_subg = emb[pos]
             emb = pool[0](emb_subg, batch)
         elif self.model_type == 1:
-            graph_emb = torch.sum(emb, dim=0)
-            all_graph_embs = graph_emb.repeat(len(subG_node), 1)
-            batch, pos = pad2batch(subG_node)
-            emb_subg = emb[pos]
-            emb_subg = pool[0](emb_subg, batch)
-            emb = torch.sub(all_graph_embs, emb_subg)
+            batch_comp, pos_comp = pad2batch(comp_node)
+            emb_comp = emb[pos_comp]
+            emb = pool[1](emb_comp, batch_comp)
         else:
-            graph_emb = torch.sum(emb, dim=0)
-            all_graph_embs = graph_emb.repeat(len(subG_node), 1)
             batch, pos = pad2batch(subG_node)
             emb_subg = emb[pos]
             emb_subg = pool[0](emb_subg, batch)
-            emb_comp = torch.sub(all_graph_embs, emb_subg)
+            batch_comp, pos_comp = pad2batch(comp_node)
+            emb_comp = emb[pos_comp]
+            emb_comp = pool[1](emb_comp, batch_comp)
             emb = torch.cat([emb_subg, emb_comp], dim=-1)
 
         return emb
 
-    def forward(self, x, edge_index, edge_weight, subG_node, id=0):
+    def forward(self, x, edge_index, edge_weight, subG_node, comp_node, z=None, id=0):
         emb = self.NodeEmb(x, edge_index, edge_weight)
-        emb = self.Pool(emb, subG_node, self.pools)
+        emb = self.Pool(emb, subG_node, comp_node, self.pools)
         return self.preds[id](emb)
 
 
