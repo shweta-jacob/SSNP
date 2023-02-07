@@ -246,14 +246,14 @@ def test(pool1="size",
         early_stop = 0
         for i in range(300):
             t1 = time.time()
-            trn_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn)
+            trn_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn, device=config.device)
             trn_time.append(time.time() - t1)
 
             if i >= 0:
                 score, _ = train.test(gnn,
                                       val_loader,
                                       score_fn,
-                                      loss_fn=loss_fn)
+                                      loss_fn=loss_fn, device=config.device)
 
                 if score > val_score:
                     early_stop = 0
@@ -262,7 +262,7 @@ def test(pool1="size",
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
-                                          loss_fn=loss_fn)
+                                          loss_fn=loss_fn, device=config.device)
                     inf_end = time.time()
                     inference_time.append(inf_end - inf_start)
                     tst_score = score
@@ -275,7 +275,7 @@ def test(pool1="size",
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
-                                          loss_fn=loss_fn)
+                                          loss_fn=loss_fn, device=config.device)
                     inf_end = time.time()
                     inference_time.append(inf_end - inf_start)
                     tst_score = max(score, tst_score)
@@ -287,7 +287,7 @@ def test(pool1="size",
                     early_stop += 1
                     if i % 10 == 0:
                         inf_start = time.time()
-                        test = train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn)
+                        test = train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn, device=config.device)
                         inf_end = time.time()
                         inference_time.append(inf_end - inf_start)
                         print(

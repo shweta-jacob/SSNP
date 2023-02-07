@@ -1,7 +1,7 @@
 import torch
 
 
-def train(optimizer, model, dataloader, metrics, loss_fn):
+def train(optimizer, model, dataloader, metrics, loss_fn, device):
     '''
     Train models in an epoch.
     '''
@@ -11,7 +11,7 @@ def train(optimizer, model, dataloader, metrics, loss_fn):
     preds = []
     for batch in dataloader:
         optimizer.zero_grad()
-        pred = model(*batch[:-1], id=0)
+        pred = model(*batch[:-1], device=device, id=0)
         loss = loss_fn(pred, batch[-1])
         preds.append(pred)
         ys.append(batch[-1])
@@ -24,7 +24,7 @@ def train(optimizer, model, dataloader, metrics, loss_fn):
 
 
 @torch.no_grad()
-def test(model, dataloader, metrics, loss_fn):
+def test(model, dataloader, metrics, loss_fn, device):
     '''
     Test models either on validation dataset or test dataset.
     '''
@@ -32,7 +32,7 @@ def test(model, dataloader, metrics, loss_fn):
     preds = []
     ys = []
     for batch in dataloader:
-        pred = model(*batch[:-1])
+        pred = model(*batch[:-1], device=device)
         preds.append(pred)
         ys.append(batch[-1])
     pred = torch.cat(preds, dim=0)
