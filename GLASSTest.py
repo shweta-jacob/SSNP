@@ -148,24 +148,24 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         aggr: aggregation method. mean, sum, or gcn.
     '''
     global training, val, testing
-    conv = models.EmbZGConv(hidden_dim,
-                            hidden_dim,
-                            conv_layer,
-                            max_deg=max_deg,
-                            activation=nn.ELU(inplace=True),
-                            jk=jk,
-                            dropout=dropout,
-                            conv=functools.partial(GLASSConv,
-                                                   aggr=aggr,
-                                                   dropout=dropout),
-                            gn=True)
+    # conv = models.EmbZGConv(hidden_dim,
+    #                         hidden_dim,
+    #                         conv_layer,
+    #                         max_deg=max_deg,
+    #                         activation=nn.ELU(inplace=True),
+    #                         jk=jk,
+    #                         dropout=dropout,
+    #                         conv=functools.partial(GLASSConv,
+    #                                                aggr=aggr,
+    #                                                dropout=dropout),
+    #                         gn=True)
 
     # use pretrained node embeddings.
     if args.use_nodeid:
         print("load ", f"./Emb/{args.dataset}_{hidden_dim}.pt")
         emb = torch.load(f"./Emb/{args.dataset}_{hidden_dim}.pt",
                          map_location=torch.device('cpu')).detach()
-        conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
+        # conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
         trn_dataset.x = emb
         val_dataset.x = emb
         tst_dataset.x = emb
@@ -199,8 +199,8 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
     else:
         raise NotImplementedError
 
-    gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]),
-                       torch.nn.ModuleList([pool_fn1, pool_fn2]), args.model).to(config.device)
+    gnn = models.GLASS(None, torch.nn.ModuleList([mlp]),
+                       torch.nn.ModuleList([pool_fn1, pool_fn2]), args.model, hidden_dim).to(config.device)
     parameters = list(gnn.parameters())
     total_params = sum(p.numel() for param in parameters for p in param)
     print(f'Total number of parameters is {total_params}')

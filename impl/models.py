@@ -320,10 +320,10 @@ class GLASS(nn.Module):
         preds[id] and pools[id] is used to predict the id-th target. Can be used for SSL.
     '''
     def __init__(self, conv: EmbZGConv, preds: nn.ModuleList,
-                 pools: nn.ModuleList, model_type):
+                 pools: nn.ModuleList, model_type, hidden_dim):
         super().__init__()
         self.conv = conv
-        self.operator_diff = MLP(channel_list=[64*3, 64, 64],
+        self.operator_diff = MLP(channel_list=[hidden_dim*3, hidden_dim*2, hidden_dim],
               act_first=True, act="ELU", dropout=[0.5, 0.5])
         self.preds = preds
         self.pools = pools

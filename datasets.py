@@ -38,7 +38,7 @@ class BaseGraph(Data):
 
     def setOneFeature(self):
         # use homogeneous node features.
-        self.x = torch.ones((self.x.shape[0], 1, 1), dtype=torch.int64)
+        self.x = torch.ones((self.x.shape[0], 16))
 
     def setNodeIdFeature(self):
         # use nodeid as node features.
