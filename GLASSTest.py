@@ -5,16 +5,23 @@ import random
 import time
 
 import numpy as np
+import scipy.sparse as ssp
 import torch
 import torch.nn as nn
 import yaml
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 from torch.optim import Adam
+from torch_geometric.loader import DataLoader
 from torch_geometric.nn import MLP
+from torch_sparse import SparseTensor
 
 import datasets
 from impl import models, SubGDataset, train, metrics, utils, config
-from impl.models import GLASSConv
+from impl.models import GLASSConv, GCN, DGCNN
+from impl.utils import extract_enclosing_subgraphs
+import warnings
+warnings.simplefilter('ignore', FutureWarning)
+warnings.simplefilter('ignore', UserWarning)
 
 parser = argparse.ArgumentParser(description='')
 # Dataset settings
@@ -64,6 +71,7 @@ if baseG.y.unique().shape[0] == 2:
     def loss_fn(x, y):
         return BCEWithLogitsLoss()(x.flatten(), y.flatten())
 
+
     baseG.y = baseG.y.to(torch.float)
     if baseG.y.ndim > 1:
         output_channels = baseG.y.shape[1]
@@ -86,7 +94,7 @@ def split():
     load and split dataset.
     '''
     # initialize and split dataset
-    global trn_dataset, val_dataset, tst_dataset, baseG
+    global trn_dataset, val_dataset, tst_dataset, baseG, trn_loader, val_loader, tst_loader
     global max_deg, output_channels, loader_fn, tloader_fn
     baseG = datasets.load_dataset(args.dataset)
     if baseG.y.unique().shape[0] == 2:
@@ -109,6 +117,34 @@ def split():
     trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
     tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
+
+    N = trn_dataset.x.shape[0]
+    E = trn_dataset.edge_index.size()[-1]
+    sparse_adj = SparseTensor(
+        row=trn_dataset.edge_index[0].to(config.device), col=trn_dataset.edge_index[1].to(config.device),
+        value=torch.arange(E, device=config.device),
+        sparse_sizes=(N, N))
+    rw_kwargs = {"rw_m": 1, "rw_M": 5, "sparse_adj": sparse_adj,
+            "edge_index": trn_dataset.edge_index,
+            "device": config.device,
+            "data": trn_dataset}
+
+    A = ssp.csr_matrix(
+        (trn_dataset.edge_attr, (trn_dataset.edge_index[0], trn_dataset.edge_index[1])),
+        shape=(trn_dataset.x.shape[0], trn_dataset.x.shape[0])
+    )
+    trn_list = extract_enclosing_subgraphs(
+        trn_dataset.pos, A, trn_dataset.x, trn_dataset.y, 0, rw_kwargs=rw_kwargs)
+    val_list = extract_enclosing_subgraphs(
+        val_dataset.pos, A, val_dataset.x, val_dataset.y, 0, rw_kwargs=rw_kwargs)
+    tst_list = extract_enclosing_subgraphs(
+        tst_dataset.pos, A, tst_dataset.x, tst_dataset.y, 0, rw_kwargs=rw_kwargs)
+    trn_loader = DataLoader(trn_list, batch_size=32,
+               shuffle=True)
+    val_loader = DataLoader(val_list, batch_size=32,
+               shuffle=True)
+    tst_loader = DataLoader(tst_list, batch_size=32,
+               shuffle=True)
     # choice of dataloader
     if args.use_maxzeroone:
 
@@ -155,19 +191,20 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
                                                    dropout=dropout),
                             gn=True)
 
+    emb = baseG.x
     # use pretrained node embeddings.
     if args.use_nodeid:
         print("load ", f"./Emb/{args.dataset}_{hidden_dim}.pt")
         emb = torch.load(f"./Emb/{args.dataset}_{hidden_dim}.pt",
                          map_location=torch.device('cpu')).detach()
-        conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
+        emb = nn.Embedding.from_pretrained(emb, freeze=False)
 
     num_rep = 1
     if args.model == 2:
         num_rep = 2
     in_channels = hidden_dim * (conv_layer) * num_rep if jk else hidden_dim
     mlp = MLP(channel_list=[in_channels, output_channels],
-              act_first=True, act ="ELU", dropout=[0.25])
+              act_first=True, act="ELU", dropout=[0.25])
     # mlp = nn.Linear(hidden_dim * (conv_layer) * num_rep if jk else hidden_dim,
     #                 output_channels)
 
@@ -183,8 +220,8 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
     else:
         raise NotImplementedError
 
-    gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]),
-                       torch.nn.ModuleList([pool_fn1, pool_fn2]), args.model).to(config.device)
+    max_z = 1000
+    gnn = GCN(hidden_dim, output_channels, conv_layer, max_z, node_embedding=emb, dropedge=0).to(config.device)
     parameters = list(gnn.parameters())
     total_params = sum(p.numel() for param in parameters for p in param)
     print(f'Total number of parameters is {total_params}')
@@ -230,16 +267,16 @@ def test(pool1="size",
         split()
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio,
                          aggr)
-        trn_loader = loader_fn(trn_dataset, batch_size)
-        val_loader = tloader_fn(val_dataset, batch_size)
-        tst_loader = tloader_fn(tst_dataset, batch_size)
+        # trn_loader = loader_fn(trn_dataset, batch_size)
+        # val_loader = tloader_fn(val_dataset, batch_size)
+        # tst_loader = tloader_fn(tst_dataset, batch_size)
         end_pre = time.time()
         preproc_times.append(end_pre - start_pre)
         optimizer = Adam(gnn.parameters(), lr=lr)
         val_score = 0
         tst_score = 0
         early_stop = 0
-        for i in range(300):
+        for i in range(10000):
             t1 = time.time()
             trn_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn)
             trn_time.append(time.time() - t1)
@@ -264,6 +301,7 @@ def test(pool1="size",
                     print(
                         f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {val_score:.4f} tst {tst_score:.4f}",
                         flush=True)
+                    print(f"Best so far- val {val_score:.4f} tst {tst_score:.4f}")
                 elif score >= val_score - 1e-5:
                     inf_start = time.time()
                     score, _ = train.test(gnn,
@@ -276,6 +314,7 @@ def test(pool1="size",
                     print(
                         f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {val_score:.4f} tst {score:.4f}",
                         flush=True)
+                    print(f"Best so far- val {val_score:.4f} tst {tst_score:.4f}")
                 else:
                     early_stop += 1
                     if i % 10 == 0:
@@ -286,6 +325,7 @@ def test(pool1="size",
                         print(
                             f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {score:.4f} tst {test[0]:.4f}",
                             flush=True)
+                        print(f"Best so far- val {val_score:.4f} tst {tst_score:.4f}")
             if val_score >= 1 - 1e-5:
                 early_stop += 1
             # if early_stop > 100 / num_div:
@@ -320,6 +360,7 @@ def test(pool1="size",
     }
     with open(f"{args.dataset}_model{args.model}_results.json", 'w') as output_file:
         json.dump(exp_results, output_file)
+
 
 print(args)
 # read configuration

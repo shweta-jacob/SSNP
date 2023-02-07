@@ -62,6 +62,7 @@ def draw_graph(graph):
     plt.show()  # check if same as in the doc visually
     f.savefig("input_graph.pdf", bbox_inches='tight')
 
+
 def neighbors(fringe, A, outgoing=True):
     # Find all 1-hop neighbors of nodes in fringe from graph A,
     # where A is a scipy csr adjacency matrix.
@@ -75,6 +76,7 @@ def neighbors(fringe, A, outgoing=True):
 
     return res
 
+
 def k_hop_subgraph(center, num_hops, A, sample_ratio=1.0,
                    max_nodes_per_hop=None, node_features=None,
                    y=1, directed=False, A_csc=None, rw_kwargs=None):
@@ -82,7 +84,7 @@ def k_hop_subgraph(center, num_hops, A, sample_ratio=1.0,
     # Extract the k-hop enclosing subgraph around link (src, dst) from A.
     if not rw_kwargs:
         nodes = center
-        dists = [0, 0]
+        dists = [0] * len(center)
         visited = set(center)
         fringe = set(center)
         for dist in range(1, num_hops + 1):
@@ -154,16 +156,26 @@ def k_hop_subgraph(center, num_hops, A, sample_ratio=1.0,
         # mask2 = (sub_edge_index[0] != dst) | (sub_edge_index[1] != src)
         # sub_edge_index_revised = sub_edge_index[:, mask1 & mask2]
 
+        y = torch.tensor([y])
+        ones = starting_nodes.tolist()
+        zeros = list(set(rw_set) - set(starting_nodes.tolist()))
+        # old_new_node_ids = {subnode: counter for counter, subnode in enumerate(sub_nodes.tolist())}
+        # ones = [old_new_node_ids[node_id] for node_id in ones]
+        # zeros = [old_new_node_ids[node_id] for node_id in zeros]
 
-        y = torch.tensor([y], dtype=torch.int)
-        x = data_org.x[sub_nodes] if hasattr(data_org.x, 'size') else None
+        sub_nodes_arranged = ones + zeros
+        x = data_org.x[sub_nodes_arranged] if hasattr(data_org.x, 'size') else None
+        one_label = torch.ones(size=[len(ones), ]).to(torch.long)
+        zero_label = torch.zeros(size=[len(zeros), ]).to(torch.long)
+
         # Calculate node labeling.
-        z_revised = torch.ones(x.shape[0])
+        z_revised = torch.cat([one_label, zero_label], dim=0)
         data_revised = Data(x=x, z=z_revised,
                             edge_index=sub_edge_index, y=y, node_id=torch.LongTensor(rw_set),
                             num_nodes=len(rw_set), edge_weight=torch.ones(sub_edge_index.shape[-1]))
         # end of core-logic for S.C.A.L.E.D.
         return data_revised
+
 
 def construct_pyg_graph(node_ids, adj, dists, node_features, y, node_label='drnl'):
     # Construct a pytorch_geometric graph from a scipy csr adjacency matrix.
@@ -182,22 +194,23 @@ def construct_pyg_graph(node_ids, adj, dists, node_features, y, node_label='drnl
                 node_id=node_ids, num_nodes=num_nodes)
     return data
 
+
 def extract_enclosing_subgraphs(pos, A, x, y, num_hops, node_label='zo',
                                 ratio_per_hop=1.0, max_nodes_per_hop=None,
                                 directed=False, A_csc=None, rw_kwargs=None):
     # Extract enclosing subgraphs from A for all links in link_index.
     data_list = []
 
-    for center in tqdm(pos.tolist()):
+    for idx, center in enumerate(tqdm(pos.tolist())):
         if not rw_kwargs['rw_m']:
-            tmp = k_hop_subgraph(center, num_hops, A, ratio_per_hop,
-                                 max_nodes_per_hop, node_features=x, y=y,
+            tmp = k_hop_subgraph(list(filter(lambda pos: pos != -1, center)), num_hops, A, ratio_per_hop,
+                                 max_nodes_per_hop, node_features=x, y=y[idx],
                                  directed=directed, A_csc=A_csc)
 
             data = construct_pyg_graph(*tmp, node_label)
         else:
-            data = k_hop_subgraph(center, num_hops, A, ratio_per_hop,
-                                  max_nodes_per_hop, node_features=x, y=y,
+            data = k_hop_subgraph(list(filter(lambda pos: pos != -1, center)), num_hops, A, ratio_per_hop,
+                                  max_nodes_per_hop, node_features=x, y=y[idx],
                                   directed=directed, A_csc=A_csc, rw_kwargs=rw_kwargs)
         draw = False
         if draw:
