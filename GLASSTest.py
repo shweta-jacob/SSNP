@@ -16,6 +16,7 @@ import datasets
 from impl import models, SubGDataset, train, metrics, utils, config
 from impl.models import GLASSConv
 import warnings
+
 warnings.simplefilter('ignore', FutureWarning)
 warnings.simplefilter('ignore', UserWarning)
 
@@ -192,7 +193,8 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         raise NotImplementedError
 
     gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]),
-                       torch.nn.ModuleList([pool_fn1, pool_fn2]), args.model, args.samples, args.m, args.M).to(config.device)
+                       torch.nn.ModuleList([pool_fn1, pool_fn2]), args.model, args.samples, args.m, args.M).to(
+        config.device)
     parameters = list(gnn.parameters())
     total_params = sum(p.numel() for param in parameters for p in param)
     print(f'Total number of parameters is {total_params}')
@@ -272,7 +274,7 @@ def test(pool1="size",
                     print(
                         f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {val_score:.4f} tst {tst_score:.4f}",
                         flush=True)
-                    print(f"Best picked so far- val: {val_score:.4f} tst: {tst_score:.4f}, early stop: {early_stop}")
+                    print(f"Best picked so far- val: {val_score:.4f} tst: {tst_score:.4f}, early stop: {early_stop} \n")
                 elif score >= val_score - 1e-5:
                     inf_start = time.time()
                     score, _ = train.test(gnn,
@@ -285,7 +287,7 @@ def test(pool1="size",
                     print(
                         f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {val_score:.4f} tst {score:.4f}",
                         flush=True)
-                    print(f"Best picked so far- val: {val_score:.4f} tst: {tst_score:.4f}, early stop: {early_stop}")
+                    print(f"Best picked so far- val: {val_score:.4f} tst: {tst_score:.4f}, early stop: {early_stop} \n")
                 else:
                     early_stop += 1
                     if i % 10 == 0:
@@ -297,7 +299,7 @@ def test(pool1="size",
                             f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {score:.4f} tst {test[0]:.4f}",
                             flush=True)
                         print(
-                            f"Best picked so far- val: {val_score:.4f} tst: {tst_score:.4f}, early stop: {early_stop}")
+                            f"Best picked so far- val: {val_score:.4f} tst: {tst_score:.4f}, early stop: {early_stop} \n")
             if val_score >= 1 - 1e-5:
                 early_stop += 1
             # if early_stop > 100 / num_div:
