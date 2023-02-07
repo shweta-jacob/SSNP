@@ -278,7 +278,7 @@ def test(pool1="size",
         val_score = 0
         tst_score = 0
         early_stop = 0
-        for i in range(10000):
+        for i in range(300):
             t1 = time.time()
             trn_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn)
             trn_time.append(time.time() - t1)
