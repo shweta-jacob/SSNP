@@ -179,6 +179,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         z_ratio: see GLASSConv in impl/model.py. Z_ratio in [0.5, 1].
         aggr: aggregation method. mean, sum, or gcn.
     '''
+    synthetic = True
     conv = models.EmbZGConv(hidden_dim,
                             hidden_dim,
                             conv_layer,
@@ -198,6 +199,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         emb = torch.load(f"./Emb/{args.dataset}_{hidden_dim}.pt",
                          map_location=torch.device('cpu')).detach()
         emb = nn.Embedding.from_pretrained(emb, freeze=False)
+        synthetic = False
 
     num_rep = 1
     if args.model == 2:
@@ -221,7 +223,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         raise NotImplementedError
 
     max_z = 1000
-    gnn = GCN(hidden_dim, output_channels, conv_layer, max_z, node_embedding=emb, dropedge=0).to(config.device)
+    gnn = GCN(hidden_dim, output_channels, conv_layer, max_z, node_embedding=emb, dropedge=0, synthetic=synthetic).to(config.device)
     parameters = list(gnn.parameters())
     total_params = sum(p.numel() for param in parameters for p in param)
     print(f'Total number of parameters is {total_params}')

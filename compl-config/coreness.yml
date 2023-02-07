@@ -1,8 +1,8 @@
-aggr: gcn
+aggr: sum
 batch_size: 200
 conv_layer: 2
 dropout: 0.05
-hidden_dim: 20
+hidden_dim: 16
 lr: 0.0067
 pool1: sum
 pool2: sum

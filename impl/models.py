@@ -14,7 +14,7 @@ from .utils import pad2batch
 
 
 class GCN(torch.nn.Module):
-    def __init__(self, hidden_channels, output_channels, num_layers, max_z, node_embedding=None, dropout=0.75, dropedge=0.0):
+    def __init__(self, hidden_channels, output_channels, num_layers, max_z, node_embedding=None, dropout=0.75, dropedge=0.0, synthetic=False):
         super(GCN, self).__init__()
 
         self.node_embedding = node_embedding
@@ -30,6 +30,7 @@ class GCN(torch.nn.Module):
         self.dropout = dropout
         self.dropedge = dropedge
         self.mlp = MLP([hidden_channels, hidden_channels, output_channels], dropout=dropout)
+        self.synthetic = synthetic
 
     def reset_parameters(self):
         for conv in self.convs:
@@ -43,11 +44,11 @@ class GCN(torch.nn.Module):
         z_emb = self.z_embedding(z)
         if z_emb.ndim == 3:  # in case z has multiple integer labels
             z_emb = z_emb.sum(dim=1)
-        if False and x is not None:
+        if self.synthetic and x is not None:
             x = torch.cat([z_emb, x.to(torch.float)], 1)
         else:
             x = z_emb
-        if self.node_embedding is not None and node_id is not None:
+        if not self.synthetic and self.node_embedding is not None and node_id is not None:
             n_emb = self.node_embedding(node_id)
             x = torch.cat([x, n_emb], 1)
         for conv in self.convs[:-1]:
