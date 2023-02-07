@@ -32,6 +32,9 @@ parser.add_argument('--use_nodeid', action='store_true')
 parser.add_argument('--model', type=int, default=0)
 # node label settings
 parser.add_argument('--use_maxzeroone', action='store_true')
+parser.add_argument('--samples', type=int, default=5)
+parser.add_argument('--m', type=int, default=1)
+parser.add_argument('--M', type=int, default=5)
 
 parser.add_argument('--repeat', type=int, default=1)
 parser.add_argument('--device', type=int, default=0)
@@ -189,7 +192,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         raise NotImplementedError
 
     gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]),
-                       torch.nn.ModuleList([pool_fn1, pool_fn2]), args.model).to(config.device)
+                       torch.nn.ModuleList([pool_fn1, pool_fn2]), args.model, args.samples, args.m, args.M).to(config.device)
     parameters = list(gnn.parameters())
     total_params = sum(p.numel() for param in parameters for p in param)
     print(f'Total number of parameters is {total_params}')

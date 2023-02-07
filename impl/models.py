@@ -6,6 +6,8 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_sequence
 from torch_geometric.nn import GCNConv, global_max_pool, global_mean_pool, global_add_pool
 from torch_geometric.nn.norm import GraphNorm, GraphSizeNorm
+from torch_sparse import SparseTensor
+
 from .utils import pad2batch
 
 
@@ -15,6 +17,7 @@ class Seq(nn.Module):
     Args: 
         modlist an iterable of modules to add.
     '''
+
     def __init__(self, modlist):
         super().__init__()
         self.modlist = nn.ModuleList(modlist)
@@ -34,6 +37,7 @@ class MLP(nn.Module):
         activation: activation function.
         gn: whether to use GraphNorm layer.
     '''
+
     def __init__(self,
                  input_channels: int,
                  hidden_channels: int,
@@ -92,7 +96,7 @@ def buildAdj(edge_index, edge_weight, n_node: int, aggr: str):
     adj = torch.sparse_coo_tensor(edge_index,
                                   edge_weight,
                                   size=(n_node, n_node))
-    deg = torch.sparse.sum(adj, dim=(1, )).to_dense().flatten()
+    deg = torch.sparse.sum(adj, dim=(1,)).to_dense().flatten()
     deg[deg < 0.5] += 1.0
     if aggr == "mean":
         deg = 1.0 / deg
@@ -121,6 +125,7 @@ class GLASSConv(torch.nn.Module):
         aggr: the aggregation method.
         z_ratio: the ratio to mix the transformed features.
     '''
+
     def __init__(self,
                  in_channels: int,
                  out_channels: int,
@@ -185,6 +190,7 @@ class EmbZGConv(nn.Module):
         gn: whether to use GraphNorm.
         jk: whether to use Jumping Knowledge Network.
     '''
+
     def __init__(self,
                  hidden_channels,
                  output_channels,
@@ -279,6 +285,7 @@ class PoolModule(nn.Module):
         trans_fn: module to transfer node embeddings.
         pool_fn: module to pool node embeddings like global_add_pool.
     '''
+
     def __init__(self, pool_fn, trans_fn=None):
         super().__init__()
         self.pool_fn = pool_fn
@@ -326,13 +333,17 @@ class GLASS(nn.Module):
         preds and pools are ModuleList containing the same number of MLPs and Pooling layers.
         preds[id] and pools[id] is used to predict the id-th target. Can be used for SSL.
     '''
+
     def __init__(self, conv: EmbZGConv, preds: nn.ModuleList,
-                 pools: nn.ModuleList, model_type):
+                 pools: nn.ModuleList, model_type, samples, m, M):
         super().__init__()
         self.conv = conv
         self.preds = preds
         self.pools = pools
         self.model_type = model_type
+        self.samples = samples
+        self.m = m
+        self.M = M
 
     def NodeEmb(self, x, edge_index, edge_weight):
         embs = []
@@ -344,7 +355,7 @@ class GLASS(nn.Module):
         emb = torch.mean(emb, dim=1)
         return emb
 
-    def Pool(self, emb, subG_node, comp_node, pool, edge_index, device):
+    def Pool(self, emb, subG_node, comp_node, pool, edge_index, device, num_nodes):
         if self.model_type == 0:
             batch, pos = pad2batch(subG_node)
             emb_subg = emb[pos]
@@ -355,20 +366,41 @@ class GLASS(nn.Module):
             emb = pool[1](emb_comp, batch_comp)
         else:
             # sub + compl pooling
-            row, col = edge_index
-            hyper_samples = 50
-            hyper_m = 1
-            hyper_M = 5
+            # from torch_geometric.data import Data
+            # from torch_geometric.utils import to_networkx
+            #
+            # data = Data(edge_index=edge_index)
+            # G = to_networkx(data, to_undirected=True)
+            # row = torch.tensor(list(map(lambda x: x[0], G.edges())))
+            # col = torch.tensor(list(map(lambda x: x[1], G.edges())))
+            # row, col = edge_index[0].to(device), edge_index[1].to(device)
+            N = num_nodes
+            E = edge_index.size()[-1]
+            sparse_adj = SparseTensor(
+                row=edge_index[0].to(device), col=edge_index[1].to(device),
+                value=torch.arange(E, device=device),
+                sparse_sizes=(N, N))
+            row, col, _ = sparse_adj.csr()
 
             batch_comp_nodes = []
             for graph_nodes in subG_node:
-                # starting_for_rw = random.sample(subG_node, k=hyper_samples)
-                starting_for_rw = graph_nodes[graph_nodes != -1]
+                updated_graph_nodes = graph_nodes[graph_nodes != -1].tolist()
+                if self.samples:
+                    raise NotImplementedError("This flow is not implemented to avoid empty complements")
+                    updated_graph_node_list = updated_graph_nodes
+                    if len(updated_graph_node_list) < self.samples:
+                        samples_required = len(updated_graph_node_list)
+                    else:
+                        samples_required = self.samples
+                    starting_for_rw = random.sample(updated_graph_node_list, k=samples_required)
+                else:
+                    starting_for_rw = updated_graph_nodes
                 starting_nodes = torch.tensor(starting_for_rw, dtype=torch.long)
-                start = starting_nodes.repeat(hyper_M)
-                rw = torch.ops.torch_cluster.random_walk(row, col, start, hyper_m, 1, 1)[0]
-                rw_nodes = torch.unique(rw.flatten()).tolist()
+                start = starting_nodes.repeat(self.M)
+                node_ids = torch.ops.torch_cluster.random_walk(row, col, start, self.m, 1, 1)[0]
+                rw_nodes = torch.unique(node_ids.flatten()).tolist()
                 complement_nodes = set(rw_nodes).difference(starting_for_rw)
+
                 batch_comp_nodes.append(torch.Tensor(list(complement_nodes)))
 
             complement = pad_sequence(batch_comp_nodes, batch_first=True, padding_value=-1).to(torch.int64)
@@ -385,7 +417,7 @@ class GLASS(nn.Module):
 
     def forward(self, x, edge_index, edge_weight, subG_node, comp_node, z=None, device=None, id=0):
         emb = self.NodeEmb(x, edge_index, edge_weight)
-        emb = self.Pool(emb, subG_node, comp_node, self.pools, edge_index, device)
+        emb = self.Pool(emb, subG_node, comp_node, self.pools, edge_index, device, x.shape[0])
         return self.preds[id](emb)
 
 
@@ -398,6 +430,7 @@ class MyGCNConv(torch.nn.Module):
     Args:
         aggr: the aggregation method.
     '''
+
     def __init__(self,
                  in_channels: int,
                  out_channels: int,
@@ -438,6 +471,7 @@ class EmbGConv(torch.nn.Module):
         gn: whether to use GraphNorm.
         jk: whether to use Jumping Knowledge Network.
     '''
+
     def __init__(self,
                  input_channels: int,
                  hidden_channels: int,
@@ -516,6 +550,7 @@ class EdgeGNN(nn.Module):
         preds and pools are ModuleList containing the same number of MLPs and Pooling layers.
         preds[id] and pools[id] is used to predict the id-th target. Can be used for SSL.
     '''
+
     def __init__(self, conv, preds: nn.ModuleList, pools: nn.ModuleList):
         super().__init__()
         self.conv = conv
