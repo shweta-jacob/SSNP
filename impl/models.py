@@ -355,7 +355,7 @@ class GLASS(nn.Module):
         emb = torch.mean(emb, dim=1)
         return emb
 
-    def Pool(self, emb, subG_node, comp_node, pool, edge_index, device, num_nodes):
+    def Pool(self, emb, subG_node, comp_node, pool, edge_index, device, row, col):
         if self.model_type == 0:
             batch, pos = pad2batch(subG_node)
             emb_subg = emb[pos]
@@ -374,14 +374,7 @@ class GLASS(nn.Module):
             # row = torch.tensor(list(map(lambda x: x[0], G.edges())))
             # col = torch.tensor(list(map(lambda x: x[1], G.edges())))
             # row, col = edge_index[0].to(device), edge_index[1].to(device)
-            N = num_nodes
-            E = edge_index.size()[-1]
-            sparse_adj = SparseTensor(
-                row=edge_index[0].to(device), col=edge_index[1].to(device),
-                value=torch.arange(E, device=device),
-                sparse_sizes=(N, N))
-            row, col, _ = sparse_adj.csr()
-
+            
             batch_comp_nodes = []
             for graph_nodes in subG_node:
                 updated_graph_nodes = graph_nodes[graph_nodes != -1].tolist()
@@ -396,7 +389,7 @@ class GLASS(nn.Module):
                 else:
                     starting_for_rw = updated_graph_nodes
                 starting_nodes = torch.tensor(starting_for_rw, dtype=torch.long)
-                start = starting_nodes.repeat(self.M)
+                start = starting_nodes.repeat(self.M).to(device)
                 node_ids = torch.ops.torch_cluster.random_walk(row, col, start, self.m, 1, 1)[0]
                 rw_nodes = torch.unique(node_ids.flatten()).tolist()
                 complement_nodes = set(rw_nodes).difference(starting_for_rw)
@@ -417,7 +410,16 @@ class GLASS(nn.Module):
 
     def forward(self, x, edge_index, edge_weight, subG_node, comp_node, z=None, device=None, id=0):
         emb = self.NodeEmb(x, edge_index, edge_weight)
-        emb = self.Pool(emb, subG_node, comp_node, self.pools, edge_index, device, x.shape[0])
+
+        N = x.shape[0]
+        E = edge_index.size()[-1]
+        sparse_adj = SparseTensor(
+            row=edge_index[0].to(device), col=edge_index[1].to(device),
+            value=torch.arange(E, device=device),
+            sparse_sizes=(N, N))
+        row, col, _ = sparse_adj.csr()
+
+        emb = self.Pool(emb, subG_node, comp_node, self.pools, edge_index, device, row, col)
         return self.preds[id](emb)
 
 
