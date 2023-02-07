@@ -374,12 +374,11 @@ class GLASS(nn.Module):
             # row = torch.tensor(list(map(lambda x: x[0], G.edges())))
             # col = torch.tensor(list(map(lambda x: x[1], G.edges())))
             # row, col = edge_index[0].to(device), edge_index[1].to(device)
-            
+
             batch_comp_nodes = []
             for graph_nodes in subG_node:
                 updated_graph_nodes = graph_nodes[graph_nodes != -1].tolist()
                 if self.samples:
-                    raise NotImplementedError("This flow is not implemented to avoid empty complements")
                     updated_graph_node_list = updated_graph_nodes
                     if len(updated_graph_node_list) < self.samples:
                         samples_required = len(updated_graph_node_list)
