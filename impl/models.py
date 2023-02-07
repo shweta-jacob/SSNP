@@ -1,6 +1,9 @@
+import random
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.utils.rnn import pad_sequence
 from torch_geometric.nn import GCNConv, global_max_pool, global_mean_pool, global_add_pool
 from torch_geometric.nn.norm import GraphNorm, GraphSizeNorm
 from .utils import pad2batch
@@ -341,7 +344,7 @@ class GLASS(nn.Module):
         emb = torch.mean(emb, dim=1)
         return emb
 
-    def Pool(self, emb, subG_node, comp_node, pool):
+    def Pool(self, emb, subG_node, comp_node, pool, edge_index):
         if self.model_type == 0:
             batch, pos = pad2batch(subG_node)
             emb_subg = emb[pos]
@@ -351,10 +354,28 @@ class GLASS(nn.Module):
             emb_comp = emb[pos_comp]
             emb = pool[1](emb_comp, batch_comp)
         else:
+            # sub + compl pooling
+            row, col = edge_index
+            hyper_samples = 50
+            hyper_m = 1
+            hyper_M = 5
+
+            batch_comp_nodes = []
+            for graph_nodes in subG_node:
+                # starting_for_rw = random.sample(subG_node, k=hyper_samples)
+                starting_for_rw = graph_nodes[graph_nodes != -1]
+                starting_nodes = torch.tensor(starting_for_rw, dtype=torch.long)
+                start = starting_nodes.repeat(hyper_M)
+                rw = torch.ops.torch_cluster.random_walk(row, col, start, hyper_m, 1, 1)[0]
+                rw_nodes = torch.unique(rw.flatten()).tolist()
+                complement_nodes = set(rw_nodes).difference(starting_for_rw)
+                batch_comp_nodes.append(torch.Tensor(list(complement_nodes)))
+
+            complement = pad_sequence(batch_comp_nodes, batch_first=True, padding_value=-1).to(torch.int64)
             batch, pos = pad2batch(subG_node)
             emb_subg = emb[pos]
             emb_subg = pool[0](emb_subg, batch)
-            batch_comp, pos_comp = pad2batch(comp_node)
+            batch_comp, pos_comp = pad2batch(complement)
             emb_comp = emb[pos_comp]
             emb_comp = pool[1](emb_comp, batch_comp)
             emb = torch.cat([emb_subg, emb_comp], dim=-1)
@@ -363,7 +384,7 @@ class GLASS(nn.Module):
 
     def forward(self, x, edge_index, edge_weight, subG_node, comp_node, z=None, id=0):
         emb = self.NodeEmb(x, edge_index, edge_weight)
-        emb = self.Pool(emb, subG_node, comp_node, self.pools)
+        emb = self.Pool(emb, subG_node, comp_node, self.pools, edge_index)
         return self.preds[id](emb)
 
 

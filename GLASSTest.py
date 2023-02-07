@@ -15,6 +15,9 @@ from torch_geometric.nn import MLP
 import datasets
 from impl import models, SubGDataset, train, metrics, utils, config
 from impl.models import GLASSConv
+import warnings
+warnings.simplefilter('ignore', FutureWarning)
+warnings.simplefilter('ignore', UserWarning)
 
 parser = argparse.ArgumentParser(description='')
 # Dataset settings
