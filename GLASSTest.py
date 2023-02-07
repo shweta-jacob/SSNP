@@ -112,7 +112,7 @@ def split():
         raise NotImplementedError
 
     max_deg = torch.max(baseG.x)
-    baseG.to(config.device)
+    # baseG.to(config.device)
     # split data
     trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
@@ -121,8 +121,8 @@ def split():
     N = trn_dataset.x.shape[0]
     E = trn_dataset.edge_index.size()[-1]
     sparse_adj = SparseTensor(
-        row=trn_dataset.edge_index[0].to(config.device), col=trn_dataset.edge_index[1].to(config.device),
-        value=torch.arange(E, device=config.device),
+        row=trn_dataset.edge_index[0], col=trn_dataset.edge_index[1],
+        value=torch.arange(E, device="cpu"),
         sparse_sizes=(N, N))
     rw_kwargs = {"rw_m": 1, "rw_M": 5, "sparse_adj": sparse_adj,
             "edge_index": trn_dataset.edge_index,
@@ -130,7 +130,7 @@ def split():
             "data": trn_dataset}
 
     A = ssp.csr_matrix(
-        (trn_dataset.edge_attr, (trn_dataset.edge_index[0], trn_dataset.edge_index[1])),
+        (trn_dataset.edge_attr.cpu().numpy(), (trn_dataset.edge_index[0].cpu().numpy(), trn_dataset.edge_index[1].cpu().numpy())),
         shape=(trn_dataset.x.shape[0], trn_dataset.x.shape[0])
     )
     trn_list = extract_enclosing_subgraphs(
@@ -280,14 +280,14 @@ def test(pool1="size",
         early_stop = 0
         for i in range(300):
             t1 = time.time()
-            trn_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn)
+            trn_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn, device=config.device)
             trn_time.append(time.time() - t1)
 
             if i >= 0:
                 score, _ = train.test(gnn,
                                       val_loader,
                                       score_fn,
-                                      loss_fn=loss_fn)
+                                      loss_fn=loss_fn, device=config.device)
 
                 if score > val_score:
                     early_stop = 0
@@ -296,7 +296,7 @@ def test(pool1="size",
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
-                                          loss_fn=loss_fn)
+                                          loss_fn=loss_fn, device=config.device)
                     inf_end = time.time()
                     inference_time.append(inf_end - inf_start)
                     tst_score = score
@@ -309,7 +309,7 @@ def test(pool1="size",
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
-                                          loss_fn=loss_fn)
+                                          loss_fn=loss_fn, device=config.device)
                     inf_end = time.time()
                     inference_time.append(inf_end - inf_start)
                     tst_score = max(score, tst_score)
@@ -321,7 +321,7 @@ def test(pool1="size",
                     early_stop += 1
                     if i % 10 == 0:
                         inf_start = time.time()
-                        test = train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn)
+                        test = train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn, device=config.device)
                         inf_end = time.time()
                         inference_time.append(inf_end - inf_start)
                         print(

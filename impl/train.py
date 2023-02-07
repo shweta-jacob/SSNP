@@ -2,7 +2,7 @@ import torch
 from tqdm import tqdm
 
 
-def train(optimizer, model, dataloader, metrics, loss_fn):
+def train(optimizer, model, dataloader, metrics, loss_fn, device):
     '''
     Train models in an epoch.
     '''
@@ -12,6 +12,7 @@ def train(optimizer, model, dataloader, metrics, loss_fn):
     preds = []
     pbar = tqdm(dataloader, ncols=70, disable=True)
     for data in pbar:
+        data = data.to(device)
         optimizer.zero_grad()
         pred = model(data.num_nodes, data.z, data.edge_index, data.batch, data.x, data.edge_weight, data.node_id)
         loss = loss_fn(pred, data.y)
@@ -26,7 +27,7 @@ def train(optimizer, model, dataloader, metrics, loss_fn):
 
 
 @torch.no_grad()
-def test(model, dataloader, metrics, loss_fn):
+def test(model, dataloader, metrics, loss_fn, device):
     '''
     Test models either on validation dataset or test dataset.
     '''
@@ -35,6 +36,7 @@ def test(model, dataloader, metrics, loss_fn):
     ys = []
     pbar = tqdm(dataloader, ncols=70, disable=True)
     for data in pbar:
+        data = data.to(device)
         pred = model(data.num_nodes, data.z, data.edge_index, data.batch, data.x, data.edge_weight, data.node_id)
         preds.append(pred)
         ys.append(data.y)
