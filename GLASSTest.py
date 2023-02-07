@@ -64,6 +64,7 @@ if baseG.y.unique().shape[0] == 2:
     def loss_fn(x, y):
         return BCEWithLogitsLoss()(x.flatten(), y.flatten())
 
+
     baseG.y = baseG.y.to(torch.float)
     if baseG.y.ndim > 1:
         output_channels = baseG.y.shape[1]
@@ -167,7 +168,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         num_rep = 2
     in_channels = hidden_dim * (conv_layer) * num_rep if jk else hidden_dim
     mlp = MLP(channel_list=[in_channels, output_channels],
-              act_first=True, act ="ELU", dropout=[0.25])
+              act_first=True, act="ELU", dropout=[0.25])
     # mlp = nn.Linear(hidden_dim * (conv_layer) * num_rep if jk else hidden_dim,
     #                 output_channels)
 
@@ -264,6 +265,7 @@ def test(pool1="size",
                     print(
                         f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {val_score:.4f} tst {tst_score:.4f}",
                         flush=True)
+                    print(f"Best picked so far- val: {val_score:.4f} tst: {tst_score:.4f}, early stop: {early_stop}")
                 elif score >= val_score - 1e-5:
                     inf_start = time.time()
                     score, _ = train.test(gnn,
@@ -276,6 +278,7 @@ def test(pool1="size",
                     print(
                         f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {val_score:.4f} tst {score:.4f}",
                         flush=True)
+                    print(f"Best picked so far- val: {val_score:.4f} tst: {tst_score:.4f}, early stop: {early_stop}")
                 else:
                     early_stop += 1
                     if i % 10 == 0:
@@ -286,6 +289,8 @@ def test(pool1="size",
                         print(
                             f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {score:.4f} tst {test[0]:.4f}",
                             flush=True)
+                        print(
+                            f"Best picked so far- val: {val_score:.4f} tst: {tst_score:.4f}, early stop: {early_stop}")
             if val_score >= 1 - 1e-5:
                 early_stop += 1
             # if early_stop > 100 / num_div:
@@ -320,6 +325,7 @@ def test(pool1="size",
     }
     with open(f"{args.dataset}_model{args.model}_results.json", 'w') as output_file:
         json.dump(exp_results, output_file)
+
 
 print(args)
 # read configuration
