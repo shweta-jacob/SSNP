@@ -3,6 +3,7 @@ import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch_geometric
 from torch.nn.utils.rnn import pad_sequence
 from torch_geometric.nn import GCNConv, global_max_pool, global_mean_pool, global_add_pool
 from torch_geometric.nn.norm import GraphNorm, GraphSizeNorm
@@ -344,6 +345,13 @@ class GLASS(nn.Module):
         self.samples = samples
         self.m = m
         self.M = M
+        # self.trans_fns = nn.ModuleList([
+        #     nn.Linear(64 * 3, 64),
+        #     nn.Linear(64 * 3, 64)
+        # ])
+        # self.activation = nn.ELU(inplace=True)
+        self.mlp = torch_geometric.nn.MLP(channel_list=[64 * 3 * 2, 64 * 2, 64],
+                                          act_first=True, act="ELU", dropout=[0.5, 0.5])
 
     def NodeEmb(self, x, edge_index, edge_weight):
         embs = []
@@ -404,6 +412,11 @@ class GLASS(nn.Module):
             emb_comp = emb[pos_comp]
             emb_comp = pool[1](emb_comp, batch_comp)
             emb = torch.cat([emb_subg, emb_comp], dim=-1)
+            emb = self.mlp(emb)
+            # emb_subg = self.activation(self.trans_fns[1](emb_subg))
+            # emb_comp = self.activation(self.trans_fns[0](emb_comp))
+            # z_ratio = 0.75
+            # emb = z_ratio * emb_subg + (1 - z_ratio) * emb_comp
 
         return emb
 
