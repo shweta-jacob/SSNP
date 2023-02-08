@@ -176,7 +176,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         # if MLP mixing is enabled, num_rep is 1 throughout, else it becomes 2
         num_rep = 1
     in_channels = hidden_dim * (1) * num_rep if jk else hidden_dim
-    mlp = MLP(channel_list=[in_channels, output_channels], dropout=[0.25])
+    mlp = MLP(channel_list=[in_channels, output_channels], dropout=[0], norm=None, act=None)
     # mlp = nn.Linear(hidden_dim * (1) * num_rep if jk else hidden_dim,
     #                 output_channels)
 
