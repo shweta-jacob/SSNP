@@ -8,7 +8,6 @@ from torch.nn import Embedding, ModuleList
 from torch_geometric.nn import GCNConv, global_max_pool, global_mean_pool, global_add_pool, MLP, global_sort_pool, \
     GINConv
 from torch_geometric.nn.norm import GraphNorm, GraphSizeNorm
-from torch_geometric.utils import dropout_edge
 
 from .utils import pad2batch
 
@@ -37,10 +36,6 @@ class GCN(torch.nn.Module):
             conv.reset_parameters()
 
     def forward(self, num_nodes, z, edge_index, batch, x=None, edge_weight=None, node_id=None):
-        edge_index, _ = dropout_edge(edge_index, p=self.dropedge,
-                                    force_undirected=True,
-                                    training=self.training)
-
         z_emb = self.z_embedding(z)
         if z_emb.ndim == 3:  # in case z has multiple integer labels
             z_emb = z_emb.sum(dim=1)
@@ -116,10 +111,6 @@ class DGCNN(torch.nn.Module):
         self.mlp = MLP([dense_dim, 128, output_channels], dropout=0.5)
 
     def forward(self, num_nodes, z, edge_index, batch, x=None, edge_weight=None, node_id=None):
-        edge_index, _ = dropout_edge(edge_index, p=self.dropedge,
-                                    force_undirected=True,
-                                    training=self.training)
-
         z_emb = self.z_embedding(z)
         if z_emb.ndim == 3:  # in case z has multiple integer labels
             z_emb = z_emb.sum(dim=1)
