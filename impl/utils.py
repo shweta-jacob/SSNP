@@ -131,7 +131,7 @@ def k_hop_subgraph(center, num_hops, A, sample_ratio=1.0,
             row, col, _ = sparse_adj.csr()
             starting_nodes = torch.tensor(center, dtype=torch.long, device=device)
             start = starting_nodes.repeat(rw_M)
-            rw = torch.ops.torch_cluster.random_walk(row, col, start, rw_m, 1, 1)[0]
+            rw = torch.ops.torch_cluster.random_walk(row, col, start.cpu(), rw_m, 1, 1)[0]
             if debug:
                 from networkx import write_gexf
                 draw_graph(to_networkx(data_org))
