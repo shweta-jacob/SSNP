@@ -325,11 +325,11 @@ def test(pool1="size",
     exp_results = {}
     exp_results[f"{args.dataset}_model{args.model}"] = {
         "results": {
-            "Test Accuracy": f"{tst_average:.2f} error {tst_error:.2f}",
-            "Avg runtime": f"{np.average(run_times):.2f} with std {np.std(run_times):.2f}",
-            "Avg preprocessing time": f"{np.average(preproc_times):.2f} with std {np.std(preproc_times):.2f}",
-            "Avg train time": f"{np.average(trn_time):.2f} with std {np.std(trn_time):.3f}",
-            "Avg inference time": f"{np.average(inference_time):.2f} with std {np.std(inference_time):.2f}",
+            "Test Accuracy": f"{tst_average:.2f} ± {tst_error:.2f}",
+            "Avg runtime": f"{np.average(run_times):.2f} ± {np.std(run_times):.2f}",
+            "Avg preprocessing time": f"{np.average(preproc_times):.2f} ± {np.std(preproc_times):.2f}",
+            "Avg train time": f"{np.average(trn_time):.2f} ± {np.std(trn_time):.3f}",
+            "Avg inference time": f"{np.average(inference_time):.2f} ± {np.std(inference_time):.2f}",
         },
     }
     with open(f"{args.dataset}_model{args.model}_results.json", 'w') as output_file:
