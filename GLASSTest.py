@@ -174,11 +174,11 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
     num_rep = 1
     if args.model == 2:
         num_rep = 2
-    in_channels = hidden_dim * (conv_layer) * num_rep if jk else hidden_dim
-    mlp = MLP(channel_list=[in_channels, output_channels],
-              act_first=True, act="ELU", dropout=[0.25])
-    # mlp = nn.Linear(hidden_dim * (conv_layer) * num_rep if jk else hidden_dim,
-    #                 output_channels)
+    # in_channels = hidden_dim * (conv_layer) * num_rep if jk else hidden_dim
+    # mlp = MLP(channel_list=[in_channels, output_channels],
+    #           act_first=True, act="ELU", dropout=[0.25])
+    mlp = nn.Linear(hidden_dim * (conv_layer) * num_rep if jk else hidden_dim,
+                    output_channels)
 
     pool_fn_fn = {
         "mean": models.MeanPool,
