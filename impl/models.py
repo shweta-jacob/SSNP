@@ -29,7 +29,7 @@ class GCN(torch.nn.Module):
 
         self.dropout = dropout
         self.dropedge = dropedge
-        self.mlp = MLP([hidden_channels, hidden_channels, output_channels], dropout=dropout)
+        self.mlp = MLP([hidden_channels, hidden_channels, output_channels], dropout=dropout, norm=None)
         self.synthetic = synthetic
 
     def reset_parameters(self):
