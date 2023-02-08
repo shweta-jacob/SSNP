@@ -156,7 +156,6 @@ def k_hop_subgraph(center, num_hops, A, sample_ratio=1.0,
         # mask2 = (sub_edge_index[0] != dst) | (sub_edge_index[1] != src)
         # sub_edge_index_revised = sub_edge_index[:, mask1 & mask2]
 
-        y = torch.tensor([y])
         ones = starting_nodes.tolist()
         zeros = list(set(rw_set) - set(starting_nodes.tolist()))
         # old_new_node_ids = {subnode: counter for counter, subnode in enumerate(sub_nodes.tolist())}
