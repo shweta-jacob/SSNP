@@ -172,13 +172,13 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
 
     num_rep = 1
-    # if args.model == 2:
-    #     num_rep = 2
-    # in_channels = hidden_dim * (1) * num_rep if jk else hidden_dim
-    # mlp = MLP(channel_list=[in_channels, output_channels],
-    #           act_first=True, act="ELU", dropout=[0.25])
-    mlp = nn.Linear(hidden_dim * (1) * num_rep if jk else hidden_dim,
-                    output_channels)
+    if args.model == 2:
+        # if MLP mixing is enabled, num_rep is 1 throughout, else it becomes 2
+        num_rep = 1
+    in_channels = hidden_dim * (1) * num_rep if jk else hidden_dim
+    mlp = MLP(channel_list=[in_channels, output_channels], dropout=[0.25])
+    # mlp = nn.Linear(hidden_dim * (1) * num_rep if jk else hidden_dim,
+    #                 output_channels)
 
     pool_fn_fn = {
         "mean": models.MeanPool,
