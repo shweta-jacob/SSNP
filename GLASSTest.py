@@ -232,7 +232,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
 
     max_z = 1000
     gnn = SIGNNet(hidden_channels=hidden_dim, num_layers=conv_layer, powers=args.num_powers, train_dataset=trn_dataset,
-                  output_channels=output_channels)
+                  output_channels=output_channels).to(config.device)
     parameters = list(gnn.parameters())
     total_params = sum(p.numel() for param in parameters for p in param)
     print(f'Total number of parameters is {total_params}')
