@@ -14,7 +14,7 @@ from torch_geometric.nn import MLP
 
 import datasets
 from impl import models, SubGDataset, train, metrics, utils, config
-from impl.models import GLASSConv
+from impl.models import GLASSConv, MyGCNConv
 import warnings
 
 warnings.simplefilter('ignore', FutureWarning)
@@ -158,10 +158,8 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
                             activation=nn.ELU(inplace=True),
                             jk=jk,
                             dropout=dropout,
-                            conv=functools.partial(GLASSConv,
-                                                   aggr=aggr,
-                                                   z_ratio=z_ratio,
-                                                   dropout=dropout),
+                            conv=functools.partial(MyGCNConv,
+                                                   aggr=aggr),
                             gn=True)
 
     # use pretrained node embeddings.
