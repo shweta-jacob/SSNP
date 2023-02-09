@@ -17,9 +17,10 @@ from torch_sparse import SparseTensor
 
 import datasets
 from impl import models, SubGDataset, train, metrics, utils, config
-from impl.models import GLASSConv, GCN, DGCNN
+from impl.models import GLASSConv, GCN, DGCNN, SIGNNet
 from impl.utils import extract_enclosing_subgraphs
 import warnings
+
 warnings.simplefilter('ignore', FutureWarning)
 warnings.simplefilter('ignore', UserWarning)
 
@@ -117,6 +118,13 @@ def split():
     trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
     tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
+    if args.use_nodeid:
+        print("load ", f"./Emb/{args.dataset}_{64}.pt")
+        emb = torch.load(f"./Emb/{args.dataset}_{64}.pt",
+                         map_location=torch.device('cpu')).detach()
+        trn_dataset.x = emb
+        val_dataset.x = emb
+        tst_dataset.x = emb
 
     N = trn_dataset.x.shape[0]
     E = trn_dataset.edge_index.size()[-1]
@@ -124,27 +132,25 @@ def split():
         row=trn_dataset.edge_index[0], col=trn_dataset.edge_index[1],
         value=torch.arange(E, device="cpu"),
         sparse_sizes=(N, N))
-    rw_kwargs = {"rw_m": 1, "rw_M": 5, "sparse_adj": sparse_adj,
-            "edge_index": trn_dataset.edge_index,
-            "device": config.device,
-            "data": trn_dataset}
+    rw_kwargs = {"rw_m": 0, "rw_M": 5, "sparse_adj": sparse_adj,
+                 "edge_index": trn_dataset.edge_index,
+                 "device": config.device,
+                 "data": trn_dataset}
 
     A = ssp.csr_matrix(
-        (trn_dataset.edge_attr.cpu().numpy(), (trn_dataset.edge_index[0].cpu().numpy(), trn_dataset.edge_index[1].cpu().numpy())),
+        (trn_dataset.edge_attr.cpu().numpy(),
+         (trn_dataset.edge_index[0].cpu().numpy(), trn_dataset.edge_index[1].cpu().numpy())),
         shape=(trn_dataset.x.shape[0], trn_dataset.x.shape[0])
     )
     trn_list = extract_enclosing_subgraphs(
-        trn_dataset.pos, A, trn_dataset.x, trn_dataset.y, 0, rw_kwargs=rw_kwargs)
+        trn_dataset.pos, A, trn_dataset.x, trn_dataset.y, 1, rw_kwargs=rw_kwargs, edge_index=trn_dataset.edge_index)
     val_list = extract_enclosing_subgraphs(
-        val_dataset.pos, A, val_dataset.x, val_dataset.y, 0, rw_kwargs=rw_kwargs)
+        val_dataset.pos, A, val_dataset.x, val_dataset.y, 1, rw_kwargs=rw_kwargs, edge_index=val_dataset.edge_index)
     tst_list = extract_enclosing_subgraphs(
-        tst_dataset.pos, A, tst_dataset.x, tst_dataset.y, 0, rw_kwargs=rw_kwargs)
-    trn_loader = DataLoader(trn_list, batch_size=32,
-               shuffle=True)
-    val_loader = DataLoader(val_list, batch_size=32,
-               shuffle=True)
-    tst_loader = DataLoader(tst_list, batch_size=32,
-               shuffle=True)
+        tst_dataset.pos, A, tst_dataset.x, tst_dataset.y, 1, rw_kwargs=rw_kwargs, edge_index=tst_dataset.edge_index)
+    trn_loader = DataLoader(trn_list, batch_size=32, num_workers=32, shuffle=True)
+    val_loader = DataLoader(val_list, batch_size=32, num_workers=32, shuffle=True)
+    tst_loader = DataLoader(tst_list, batch_size=32, num_workers=32, shuffle=True)
     # choice of dataloader
     if args.use_maxzeroone:
 
@@ -223,7 +229,8 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         raise NotImplementedError
 
     max_z = 1000
-    gnn = GCN(hidden_dim, output_channels, conv_layer, max_z, node_embedding=emb, dropedge=0, synthetic=synthetic).to(config.device)
+    gnn = SIGNNet(hidden_channels=hidden_dim, num_layers=conv_layer, train_dataset=trn_dataset,
+                  output_channels=output_channels)
     parameters = list(gnn.parameters())
     total_params = sum(p.numel() for param in parameters for p in param)
     print(f'Total number of parameters is {total_params}')

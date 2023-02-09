@@ -1,5 +1,6 @@
 import math
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -12,8 +13,53 @@ from torch_geometric.nn.norm import GraphNorm, GraphSizeNorm
 from .utils import pad2batch
 
 
+class SIGNNet(torch.nn.Module):
+    def __init__(self, hidden_channels, num_layers, train_dataset, use_feature=False, node_embedding=None, dropout=0.5,
+                 pool_operatorwise=False, k_heuristic=0, k_pool_strategy="", output_channels=None):
+        super().__init__()
+
+        self.use_feature = use_feature
+        self.node_embedding = node_embedding
+
+        self.dropout = dropout
+        self.pool_operatorwise = pool_operatorwise  # pool at the operator level, esp. useful for SoP
+        self.k_heuristic = k_heuristic  # k-heuristic in k-heuristic PoS Plus
+        self.k_pool_strategy = k_pool_strategy  # k-heuristic pool strat
+        K = 2
+        self.hidden_channels = (hidden_channels + 1) * K
+        initial_channels = self.hidden_channels
+
+        if self.node_embedding is not None:
+            initial_channels += node_embedding.embedding_dim
+
+        mlp_layers = [initial_channels, hidden_channels]
+        # note; operator_diff MLP is just a linear layer that corresponds to a weight matrix, W
+        self.operator_diff = MLP(mlp_layers, dropout=dropout, batch_norm=True, act_first=True, act='elu',
+                                 plain_last=False)
+        self.link_pred_mlp = MLP([hidden_channels, hidden_channels, output_channels], dropout=dropout,
+                                 batch_norm=True, act_first=True, act='relu')
+
+    def _centre_pool_helper(self, batch, h):
+        uq, center_indices = np.unique(batch.cpu().numpy(), return_index=True)
+        h = global_mean_pool(h, batch, size=uq.shape[0])
+        return h
+
+    def forward(self, x, batch):
+        x = self.operator_diff(x)
+
+        x = self._centre_pool_helper(batch, x)
+
+        x = self.link_pred_mlp(x)
+        return x
+
+    def reset_parameters(self):
+        self.operator_diff.reset_parameters()
+        self.link_pred_mlp.reset_parameters()
+
+
 class GCN(torch.nn.Module):
-    def __init__(self, hidden_channels, output_channels, num_layers, max_z, node_embedding=None, dropout=0.75, dropedge=0.0, synthetic=False):
+    def __init__(self, hidden_channels, output_channels, num_layers, max_z, node_embedding=None, dropout=0.75,
+                 dropedge=0.0, synthetic=False):
         super(GCN, self).__init__()
 
         self.node_embedding = node_embedding
@@ -22,7 +68,7 @@ class GCN(torch.nn.Module):
 
         self.convs = ModuleList()
         initial_channels = hidden_channels
-        self.convs.append(GINConv(nn.Linear(initial_channels*2, hidden_channels), 0, False))
+        self.convs.append(GINConv(nn.Linear(initial_channels * 2, hidden_channels), 0, False))
         for _ in range(num_layers - 1):
             self.convs.append(GINConv(nn.Linear(hidden_channels, hidden_channels), 0, False))
 
@@ -146,6 +192,7 @@ class Seq(nn.Module):
     Args: 
         modlist an iterable of modules to add.
     '''
+
     def __init__(self, modlist):
         super().__init__()
         self.modlist = nn.ModuleList(modlist)
@@ -223,7 +270,7 @@ def buildAdj(edge_index, edge_weight, n_node: int, aggr: str):
     adj = torch.sparse_coo_tensor(edge_index,
                                   edge_weight,
                                   size=(n_node, n_node))
-    deg = torch.sparse.sum(adj, dim=(1, )).to_dense().flatten()
+    deg = torch.sparse.sum(adj, dim=(1,)).to_dense().flatten()
     deg[deg < 0.5] += 1.0
     if aggr == "mean":
         deg = 1.0 / deg
@@ -252,6 +299,7 @@ class GLASSConv(torch.nn.Module):
         aggr: the aggregation method.
         z_ratio: the ratio to mix the transformed features.
     '''
+
     def __init__(self,
                  in_channels: int,
                  out_channels: int,
@@ -288,6 +336,7 @@ class EmbZGConv(nn.Module):
         gn: whether to use GraphNorm.
         jk: whether to use Jumping Knowledge Network.
     '''
+
     def __init__(self,
                  hidden_channels,
                  output_channels,
@@ -378,6 +427,7 @@ class PoolModule(nn.Module):
         trans_fn: module to transfer node embeddings.
         pool_fn: module to pool node embeddings like global_add_pool.
     '''
+
     def __init__(self, pool_fn, trans_fn=None):
         super().__init__()
         self.pool_fn = pool_fn
@@ -425,6 +475,7 @@ class GLASS(nn.Module):
         preds and pools are ModuleList containing the same number of MLPs and Pooling layers.
         preds[id] and pools[id] is used to predict the id-th target. Can be used for SSL.
     '''
+
     def __init__(self, conv: EmbZGConv, preds: nn.ModuleList,
                  pools: nn.ModuleList, model_type):
         super().__init__()
@@ -481,6 +532,7 @@ class MyGCNConv(torch.nn.Module):
     Args:
         aggr: the aggregation method.
     '''
+
     def __init__(self,
                  in_channels: int,
                  out_channels: int,
@@ -521,6 +573,7 @@ class EmbGConv(torch.nn.Module):
         gn: whether to use GraphNorm.
         jk: whether to use Jumping Knowledge Network.
     '''
+
     def __init__(self,
                  input_channels: int,
                  hidden_channels: int,
@@ -599,6 +652,7 @@ class EdgeGNN(nn.Module):
         preds and pools are ModuleList containing the same number of MLPs and Pooling layers.
         preds[id] and pools[id] is used to predict the id-th target. Can be used for SSL.
     '''
+
     def __init__(self, conv, preds: nn.ModuleList, pools: nn.ModuleList):
         super().__init__()
         self.conv = conv

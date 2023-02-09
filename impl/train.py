@@ -14,7 +14,7 @@ def train(optimizer, model, dataloader, metrics, loss_fn, device):
     for data in pbar:
         data = data.to(device)
         optimizer.zero_grad()
-        pred = model(data.num_nodes, data.z, data.edge_index, data.batch, data.x, data.edge_weight, data.node_id)
+        pred = model(data.x, data.batch)
         loss = loss_fn(pred, data.y)
         preds.append(pred)
         ys.append(data.y)
@@ -37,7 +37,7 @@ def test(model, dataloader, metrics, loss_fn, device):
     pbar = tqdm(dataloader, ncols=70, disable=True)
     for data in pbar:
         data = data.to(device)
-        pred = model(data.num_nodes, data.z, data.edge_index, data.batch, data.x, data.edge_weight, data.node_id)
+        pred = model(data.x, data.batch)
         preds.append(pred)
         ys.append(data.y)
     pred = torch.cat(preds, dim=0)

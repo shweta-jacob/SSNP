@@ -5,6 +5,7 @@ from torch.nn.utils.rnn import pad_sequence
 import torch
 import random
 import scipy.sparse as ssp
+from torch_sparse import SparseTensor
 from tqdm import tqdm
 
 from torch_geometric.data import Data
@@ -112,10 +113,21 @@ def k_hop_subgraph(center, num_hops, A, sample_ratio=1.0,
         # subgraph[0, 1] = 0
         # subgraph[1, 0] = 0
 
-        if node_features is not None:
-            node_features = node_features[nodes]
+        # if node_features is not None:
+        #     node_features = node_features[nodes]
 
-        return nodes, subgraph, dists, node_features, y
+        ones = center.tolist()
+        zeros = list(set(fringe) - set(center.tolist()))
+
+        sub_nodes_arranged = ones + zeros
+        node_features = node_features[sub_nodes_arranged] if hasattr(node_features, 'size') else None
+        one_label = torch.ones(size=[len(ones), ]).to(torch.long)
+        zero_label = torch.zeros(size=[len(zeros), ]).to(torch.long)
+
+        # Calculate node labeling.
+        z_revised = torch.cat([one_label, zero_label], dim=0)
+
+        return nodes, subgraph, dists, node_features, y, z_revised
     else:
         # Start of core-logic for S.C.A.L.E.D.
         rw_m = rw_kwargs['rw_m']
@@ -176,14 +188,32 @@ def k_hop_subgraph(center, num_hops, A, sample_ratio=1.0,
         return data_revised
 
 
-def construct_pyg_graph(node_ids, adj, dists, node_features, y, node_label='drnl'):
+def construct_pyg_graph(node_ids, adj, dists, node_features, y, node_label='zo', K=1):
     # Construct a pytorch_geometric graph from a scipy csr adjacency matrix.
     u, v, r = ssp.find(adj)
     num_nodes = adj.shape[0]
-
+    csr_subgraph = adj
+    csr_shape = csr_subgraph.shape[0]
     node_ids = torch.LongTensor(node_ids)
     u, v = torch.LongTensor(u), torch.LongTensor(v)
     r = torch.LongTensor(r)
+    adj_t = SparseTensor(row=u, col=v,
+                         sparse_sizes=(csr_shape, csr_shape))
+
+    deg = adj_t.sum(dim=1).to(torch.float)
+    deg_inv_sqrt = deg.pow(-0.5)
+    deg_inv_sqrt[deg_inv_sqrt == float('inf')] = 0
+    adj_t = deg_inv_sqrt.view(-1, 1) * adj_t * deg_inv_sqrt.view(1, -1)
+
+    subgraph_features = node_features
+    subgraph = adj_t
+
+    assert subgraph_features is not None
+
+    powers_of_a = [subgraph]
+    for _ in range(K - 1):
+        powers_of_a.append(subgraph @ powers_of_a[-1])
+
     edge_index = torch.stack([u, v], 0)
     edge_weight = r.to(torch.float)
     y = torch.tensor([y])
@@ -196,17 +226,56 @@ def construct_pyg_graph(node_ids, adj, dists, node_features, y, node_label='drnl
 
 def extract_enclosing_subgraphs(pos, A, x, y, num_hops, node_label='zo',
                                 ratio_per_hop=1.0, max_nodes_per_hop=None,
-                                directed=False, A_csc=None, rw_kwargs=None):
+                                directed=False, A_csc=None, rw_kwargs=None, edge_index=None):
     # Extract enclosing subgraphs from A for all links in link_index.
     data_list = []
 
     for idx, center in enumerate(tqdm(pos.tolist())):
         if not rw_kwargs['rw_m']:
-            tmp = k_hop_subgraph(list(filter(lambda pos: pos != -1, center)), num_hops, A, ratio_per_hop,
-                                 max_nodes_per_hop, node_features=x, y=y[idx],
-                                 directed=directed, A_csc=A_csc)
+            # tmp = k_hop_subgraph(list(filter(lambda pos: pos != -1, center)), num_hops, A, ratio_per_hop,
+            #                      max_nodes_per_hop, node_features=x, y=y[idx],
+            #                      directed=directed, A_csc=A_csc)
 
-            data = construct_pyg_graph(*tmp, node_label)
+            subset, edge_index, inv, edge_mask = org_k_hop_subgraph(list(filter(lambda pos: pos != -1, center)),
+                                                                    num_hops=1,
+                                                                    edge_index=edge_index,
+                                                                    num_nodes=x.shape[0])
+            u, v = edge_index
+            u, v = torch.LongTensor(u), torch.LongTensor(v)
+            adj_t = SparseTensor(row=u, col=v,
+                                 sparse_sizes=(x.shape[0], x.shape[0]))
+
+            deg = adj_t.sum(dim=1).to(torch.float)
+            deg_inv_sqrt = deg.pow(-0.5)
+            deg_inv_sqrt[deg_inv_sqrt == float('inf')] = 0
+            adj_t = deg_inv_sqrt.view(-1, 1) * adj_t * deg_inv_sqrt.view(1, -1)
+
+            subset = set(subset.tolist())
+            ones = set(filter(lambda pos: pos != -1, center))
+            zeros = subset.difference(ones)
+            subgraph_nodes = list(ones) + list(zeros)
+
+            subgraph_features = x[subgraph_nodes]
+            subgraph = adj_t
+
+            K = 3  # how many powers?
+
+            powers_of_a = [subgraph]
+            for _ in range(K - 1):
+                powers_of_a.append(subgraph @ powers_of_a[-1])
+
+            x_a = torch.cat([torch.ones(size=[len(ones), 1]), torch.zeros(size=[len(zeros), 1])])
+            x_b = subgraph_features
+            subg_x = torch.hstack([x_a, x_b])
+
+            center_indices = [idx for idx in range(len(ones))]
+            all_x = [subg_x[center_indices]]
+            for index, power_of_a in enumerate(powers_of_a):
+                all_x.append((power_of_a @ subg_x)[center_indices])
+
+            x_revised = torch.cat(all_x, dim=-1)
+            data = Data(x=x_revised, y=y[idx])
+
         else:
             data = k_hop_subgraph(list(filter(lambda pos: pos != -1, center)), num_hops, A, ratio_per_hop,
                                   max_nodes_per_hop, node_features=x, y=y[idx],
