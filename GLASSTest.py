@@ -37,6 +37,8 @@ parser.add_argument('--use_nodeid', action='store_true')
 parser.add_argument('--model', type=int, default=0)
 # node label settings
 parser.add_argument('--use_maxzeroone', action='store_true')
+parser.add_argument('--num_hops', type=int, default=0)
+parser.add_argument('--num_powers', type=int, default=1)
 
 parser.add_argument('--repeat', type=int, default=1)
 parser.add_argument('--device', type=int, default=0)
@@ -143,11 +145,11 @@ def split():
         shape=(trn_dataset.x.shape[0], trn_dataset.x.shape[0])
     )
     trn_list = extract_enclosing_subgraphs(
-        trn_dataset.pos, A, trn_dataset.x, trn_dataset.y, 1, rw_kwargs=rw_kwargs, edge_index=trn_dataset.edge_index)
+        trn_dataset.pos, A, trn_dataset.x, trn_dataset.y, args.num_hops, args.num_powers, rw_kwargs=rw_kwargs, edge_index=trn_dataset.edge_index)
     val_list = extract_enclosing_subgraphs(
-        val_dataset.pos, A, val_dataset.x, val_dataset.y, 1, rw_kwargs=rw_kwargs, edge_index=val_dataset.edge_index)
+        val_dataset.pos, A, val_dataset.x, val_dataset.y, args.num_hops, args.num_powers, rw_kwargs=rw_kwargs, edge_index=val_dataset.edge_index)
     tst_list = extract_enclosing_subgraphs(
-        tst_dataset.pos, A, tst_dataset.x, tst_dataset.y, 1, rw_kwargs=rw_kwargs, edge_index=tst_dataset.edge_index)
+        tst_dataset.pos, A, tst_dataset.x, tst_dataset.y, args.num_hops, args.num_powers, rw_kwargs=rw_kwargs, edge_index=tst_dataset.edge_index)
     trn_loader = DataLoader(trn_list, batch_size=32, num_workers=32, shuffle=True)
     val_loader = DataLoader(val_list, batch_size=32, num_workers=32, shuffle=True)
     tst_loader = DataLoader(tst_list, batch_size=32, num_workers=32, shuffle=True)
@@ -229,7 +231,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         raise NotImplementedError
 
     max_z = 1000
-    gnn = SIGNNet(hidden_channels=hidden_dim, num_layers=conv_layer, train_dataset=trn_dataset,
+    gnn = SIGNNet(hidden_channels=hidden_dim, num_layers=conv_layer, powers=args.num_powers, train_dataset=trn_dataset,
                   output_channels=output_channels)
     parameters = list(gnn.parameters())
     total_params = sum(p.numel() for param in parameters for p in param)

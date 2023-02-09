@@ -224,7 +224,7 @@ def construct_pyg_graph(node_ids, adj, dists, node_features, y, node_label='zo',
     return data
 
 
-def extract_enclosing_subgraphs(pos, A, x, y, num_hops, node_label='zo',
+def extract_enclosing_subgraphs(pos, A, x, y, num_hops, powers, node_label='zo',
                                 ratio_per_hop=1.0, max_nodes_per_hop=None,
                                 directed=False, A_csc=None, rw_kwargs=None, edge_index=None):
     # Extract enclosing subgraphs from A for all links in link_index.
@@ -237,7 +237,7 @@ def extract_enclosing_subgraphs(pos, A, x, y, num_hops, node_label='zo',
             #                      directed=directed, A_csc=A_csc)
 
             subset, edge_index, inv, edge_mask = org_k_hop_subgraph(list(filter(lambda pos: pos != -1, center)),
-                                                                    num_hops=1,
+                                                                    num_hops=num_hops,
                                                                     edge_index=edge_index,
                                                                     num_nodes=x.shape[0])
             u, v = edge_index
@@ -258,7 +258,7 @@ def extract_enclosing_subgraphs(pos, A, x, y, num_hops, node_label='zo',
             subgraph_features = x[subgraph_nodes]
             subgraph = adj_t
 
-            K = 3  # how many powers?
+            K = powers  # how many powers?
 
             powers_of_a = [subgraph]
             for _ in range(K - 1):

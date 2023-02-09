@@ -14,7 +14,7 @@ from .utils import pad2batch
 
 
 class SIGNNet(torch.nn.Module):
-    def __init__(self, hidden_channels, num_layers, train_dataset, use_feature=False, node_embedding=None, dropout=0.5,
+    def __init__(self, hidden_channels, num_layers, powers, train_dataset, use_feature=False, node_embedding=None, dropout=0.5,
                  pool_operatorwise=False, k_heuristic=0, k_pool_strategy="", output_channels=None):
         super().__init__()
 
@@ -25,7 +25,7 @@ class SIGNNet(torch.nn.Module):
         self.pool_operatorwise = pool_operatorwise  # pool at the operator level, esp. useful for SoP
         self.k_heuristic = k_heuristic  # k-heuristic in k-heuristic PoS Plus
         self.k_pool_strategy = k_pool_strategy  # k-heuristic pool strat
-        K = 2
+        K = powers + 1
         self.hidden_channels = (hidden_channels + 1) * K
         initial_channels = self.hidden_channels
 
