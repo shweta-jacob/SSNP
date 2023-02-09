@@ -336,8 +336,10 @@ def test(pool1="size",
         },
     }
     results_json = f"{args.dataset}_model{args.model}_results.json"
-    if args.diffusion:
-        results_json = f"{args.dataset}_model{args.model}_with_diff_results.json"
+    if args.model == 2:
+        results_json = f"{args.dataset}_model{args.model}_m_{args.m}_M_{args.M}_results.json"
+        if args.diffusion:
+            results_json = f"{args.dataset}_model{args.model}_m_{args.m}_M_{args.M}_with_diff_results.json"
     with open(results_json, 'w') as output_file:
         json.dump(exp_results, output_file)
 
