@@ -247,10 +247,6 @@ class EmbZGConv(nn.Module):
                 gn.reset_parameters()
 
     def forward(self, x, edge_index, edge_weight, z=None):
-        # z is the node label.
-        if z is None:
-            mask = (torch.zeros(
-                (x.shape[0]), device=x.device) < 0.5).reshape(-1, 1)
         # convert integer input to vector node features.
         x = self.input_emb(x).reshape(x.shape[0], -1)
         x = self.emb_gn(x)
@@ -336,7 +332,7 @@ class GLASS(nn.Module):
     '''
 
     def __init__(self, conv: EmbZGConv, preds: nn.ModuleList,
-                 pools: nn.ModuleList, model_type, samples, m, M):
+                 pools: nn.ModuleList, model_type, hidden_dim, conv_layer, samples, m, M, diffusion):
         super().__init__()
         self.conv = conv
         self.preds = preds
@@ -345,12 +341,9 @@ class GLASS(nn.Module):
         self.samples = samples
         self.m = m
         self.M = M
-        # self.trans_fns = nn.ModuleList([
-        #     nn.Linear(64 * 3, 64),
-        #     nn.Linear(64 * 3, 64)
-        # ])
-        # self.activation = nn.ELU(inplace=True)
-        self.mlp = torch_geometric.nn.MLP(channel_list=[64 * 3 * 2, 64 * 2, 64],
+        self.diffusion = diffusion
+        if self.diffusion:
+            self.mlp = torch_geometric.nn.MLP(channel_list=[hidden_dim * conv_layer * 2, hidden_dim * 2, hidden_dim],
                                           act_first=True, act="ELU", dropout=[0.5, 0.5])
 
     def NodeEmb(self, x, edge_index, edge_weight):
@@ -412,11 +405,8 @@ class GLASS(nn.Module):
             emb_comp = emb[pos_comp]
             emb_comp = pool[1](emb_comp, batch_comp)
             emb = torch.cat([emb_subg, emb_comp], dim=-1)
-            emb = self.mlp(emb)
-            # emb_subg = self.activation(self.trans_fns[1](emb_subg))
-            # emb_comp = self.activation(self.trans_fns[0](emb_comp))
-            # z_ratio = 0.75
-            # emb = z_ratio * emb_subg + (1 - z_ratio) * emb_comp
+            if self.diffusion:
+                emb = self.mlp(emb)
 
         return emb
 
