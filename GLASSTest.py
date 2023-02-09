@@ -36,7 +36,7 @@ parser.add_argument('--use_maxzeroone', action='store_true')
 parser.add_argument('--samples', type=int, default=0)
 parser.add_argument('--m', type=int, default=0)
 parser.add_argument('--M', type=int, default=0)
-parser.add_argument('--diffusion', type=int, default=1)
+parser.add_argument('--diffusion', action='store_true')
 
 parser.add_argument('--repeat', type=int, default=1)
 parser.add_argument('--device', type=int, default=0)
@@ -172,6 +172,8 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
 
     num_rep = 1
     in_channels = hidden_dim * (1) * num_rep if jk else hidden_dim
+    if args.model == 0:
+        in_channels = hidden_dim * (conv_layer) * num_rep if jk else hidden_dim
     if args.model == 2 and not args.diffusion:
         # if MLP mixing is enabled, num_rep is 1 throughout, else it becomes 2
         num_rep = 2
@@ -333,7 +335,10 @@ def test(pool1="size",
             "Avg inference time": f"{np.average(inference_time):.2f} with std {np.std(inference_time):.2f}",
         },
     }
-    with open(f"{args.dataset}_model{args.model}_results.json", 'w') as output_file:
+    results_json = f"{args.dataset}_model{args.model}_results.json"
+    if args.diffusion:
+        results_json = f"{args.dataset}_model{args.model}_with_diff_results.json"
+    with open(results_json, 'w') as output_file:
         json.dump(exp_results, output_file)
 
 
