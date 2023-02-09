@@ -3,6 +3,7 @@ import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch_geometric
 from torch.nn.utils.rnn import pad_sequence
 from torch_geometric.nn import GCNConv, global_max_pool, global_mean_pool, global_add_pool
 from torch_geometric.nn.norm import GraphNorm, GraphSizeNorm
@@ -246,10 +247,6 @@ class EmbZGConv(nn.Module):
                 gn.reset_parameters()
 
     def forward(self, x, edge_index, edge_weight, z=None):
-        # z is the node label.
-        if z is None:
-            mask = (torch.zeros(
-                (x.shape[0]), device=x.device) < 0.5).reshape(-1, 1)
         # convert integer input to vector node features.
         x = self.input_emb(x).reshape(x.shape[0], -1)
         x = self.emb_gn(x)
@@ -257,13 +254,13 @@ class EmbZGConv(nn.Module):
         x = F.dropout(x, p=self.dropout, training=self.training)
         # pass messages at each layer.
         for layer, conv in enumerate(self.convs[:-1]):
-            x = conv(x, edge_index, edge_weight, mask)
+            x = conv(x, edge_index, edge_weight)
             xs.append(x)
             if not (self.gns is None):
                 x = self.gns[layer](x)
             x = self.activation(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
-        x = self.convs[-1](x, edge_index, edge_weight, mask)
+        x = self.convs[-1](x, edge_index, edge_weight)
         xs.append(x)
 
         if self.jk:
@@ -335,7 +332,7 @@ class GLASS(nn.Module):
     '''
 
     def __init__(self, conv: EmbZGConv, preds: nn.ModuleList,
-                 pools: nn.ModuleList, model_type, samples, m, M):
+                 pools: nn.ModuleList, model_type, hidden_dim, conv_layer, samples, m, M, diffusion):
         super().__init__()
         self.conv = conv
         self.preds = preds
@@ -344,6 +341,10 @@ class GLASS(nn.Module):
         self.samples = samples
         self.m = m
         self.M = M
+        self.diffusion = diffusion
+        if self.diffusion:
+            self.mlp = torch_geometric.nn.MLP(channel_list=[hidden_dim * conv_layer * 2, hidden_dim * 2, hidden_dim],
+                                          act_first=True, act="ELU", dropout=[0.5, 0.5])
 
     def NodeEmb(self, x, edge_index, edge_weight):
         embs = []
@@ -404,6 +405,8 @@ class GLASS(nn.Module):
             emb_comp = emb[pos_comp]
             emb_comp = pool[1](emb_comp, batch_comp)
             emb = torch.cat([emb_subg, emb_comp], dim=-1)
+            if self.diffusion:
+                emb = self.mlp(emb)
 
         return emb
 

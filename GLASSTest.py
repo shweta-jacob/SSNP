@@ -14,7 +14,7 @@ from torch_geometric.nn import MLP
 
 import datasets
 from impl import models, SubGDataset, train, metrics, utils, config
-from impl.models import GLASSConv
+from impl.models import GLASSConv, MyGCNConv
 import warnings
 
 warnings.simplefilter('ignore', FutureWarning)
@@ -36,6 +36,7 @@ parser.add_argument('--use_maxzeroone', action='store_true')
 parser.add_argument('--samples', type=int, default=0)
 parser.add_argument('--m', type=int, default=0)
 parser.add_argument('--M', type=int, default=0)
+parser.add_argument('--diffusion', action='store_true')
 
 parser.add_argument('--repeat', type=int, default=1)
 parser.add_argument('--device', type=int, default=0)
@@ -158,10 +159,8 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
                             activation=nn.ELU(inplace=True),
                             jk=jk,
                             dropout=dropout,
-                            conv=functools.partial(GLASSConv,
-                                                   aggr=aggr,
-                                                   z_ratio=z_ratio,
-                                                   dropout=dropout),
+                            conv=functools.partial(MyGCNConv,
+                                                   aggr=aggr),
                             gn=True)
 
     # use pretrained node embeddings.
@@ -172,12 +171,16 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
 
     num_rep = 1
-    if args.model == 2:
+    in_channels = hidden_dim * (1) * num_rep if jk else hidden_dim
+    if args.model == 0:
+        in_channels = hidden_dim * (conv_layer) * num_rep if jk else hidden_dim
+    if args.model == 2 and not args.diffusion:
+        # if MLP mixing is enabled, num_rep is 1 throughout, else it becomes 2
         num_rep = 2
-    in_channels = hidden_dim * (conv_layer) * num_rep if jk else hidden_dim
-    mlp = MLP(channel_list=[in_channels, output_channels],
-              act_first=True, act="ELU", dropout=[0.25])
-    # mlp = nn.Linear(hidden_dim * (conv_layer) * num_rep if jk else hidden_dim,
+        in_channels = hidden_dim * (conv_layer) * num_rep if jk else hidden_dim
+
+    mlp = MLP(channel_list=[in_channels, output_channels], dropout=[0], norm=None, act=None)
+    # mlp = nn.Linear(hidden_dim * (1) * num_rep if jk else hidden_dim,
     #                 output_channels)
 
     pool_fn_fn = {
@@ -193,7 +196,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         raise NotImplementedError
 
     gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]),
-                       torch.nn.ModuleList([pool_fn1, pool_fn2]), args.model, args.samples, args.m, args.M).to(
+                       torch.nn.ModuleList([pool_fn1, pool_fn2]), args.model, hidden_dim, conv_layer, args.samples, args.m, args.M, args.diffusion).to(
         config.device)
     parameters = list(gnn.parameters())
     total_params = sum(p.numel() for param in parameters for p in param)
@@ -332,7 +335,12 @@ def test(pool1="size",
             "Avg inference time": f"{np.average(inference_time):.2f} ± {np.std(inference_time):.2f}",
         },
     }
-    with open(f"{args.dataset}_model{args.model}_results.json", 'w') as output_file:
+    results_json = f"{args.dataset}_model{args.model}_results.json"
+    if args.model == 2:
+        results_json = f"{args.dataset}_model{args.model}_m_{args.m}_M_{args.M}_results.json"
+        if args.diffusion:
+            results_json = f"{args.dataset}_model{args.model}_m_{args.m}_M_{args.M}_with_diff_results.json"
+    with open(results_json, 'w') as output_file:
         json.dump(exp_results, output_file)
 
 
