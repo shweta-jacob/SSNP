@@ -124,7 +124,7 @@ def split():
         row=trn_dataset.edge_index[0], col=trn_dataset.edge_index[1],
         value=torch.arange(E, device="cpu"),
         sparse_sizes=(N, N))
-    rw_kwargs = {"rw_m": 1, "rw_M": 5, "sparse_adj": sparse_adj,
+    rw_kwargs = {"rw_samples": 5, "rw_m": 1, "rw_M": 5, "sparse_adj": sparse_adj,
             "edge_index": trn_dataset.edge_index,
             "device": config.device,
             "data": trn_dataset}
@@ -266,7 +266,7 @@ def test(pool1="size",
         set_seed(repeat + 1)
         print(f"repeat {repeat}")
         start_pre = time.time()
-        split()
+        # split()
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio,
                          aggr)
         # trn_loader = loader_fn(trn_dataset, batch_size)

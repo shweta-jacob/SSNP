@@ -118,12 +118,16 @@ def k_hop_subgraph(center, num_hops, A, sample_ratio=1.0,
         return nodes, subgraph, dists, node_features, y
     else:
         # Start of core-logic for S.C.A.L.E.D.
+        rw_samples = rw_kwargs['rw_samples']
         rw_m = rw_kwargs['rw_m']
         rw_M = rw_kwargs['rw_M']
         sparse_adj = rw_kwargs['sparse_adj']
         edge_index = rw_kwargs['edge_index']
         device = rw_kwargs['device']
         data_org = rw_kwargs['data']
+
+        if rw_samples > 0:
+            center = random.sample(center, rw_samples) if len(center) > rw_samples else center
 
         if rw_kwargs.get('unique_nodes'):
             nodes = rw_kwargs.get('unique_nodes')[(center)]
