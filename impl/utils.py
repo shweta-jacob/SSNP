@@ -165,7 +165,7 @@ def k_hop_subgraph(center, num_hops, A, sample_ratio=1.0,
         # sub_edge_index_revised = sub_edge_index[:, mask1 & mask2]
 
         ones = list(set(original_center).intersection(set(rw_set)))
-        zeros = list(set(rw_set) - set(starting_nodes.tolist()))
+        zeros = list(set(rw_set) - set(ones))
         # old_new_node_ids = {subnode: counter for counter, subnode in enumerate(sub_nodes.tolist())}
         # ones = [old_new_node_ids[node_id] for node_id in ones]
         # zeros = [old_new_node_ids[node_id] for node_id in zeros]
