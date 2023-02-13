@@ -1,3 +1,5 @@
+import math
+
 import networkx as nx
 import torch_geometric
 from matplotlib import pyplot as plt
@@ -125,8 +127,10 @@ def k_hop_subgraph(center, num_hops, A, sample_ratio=1.0,
         edge_index = rw_kwargs['edge_index']
         device = rw_kwargs['device']
         data_org = rw_kwargs['data']
+        original_center = center.copy()
 
         if rw_samples > 0:
+            rw_samples = math.ceil(len(center) * rw_kwargs['rw_samples'])
             center = random.sample(center, rw_samples) if len(center) > rw_samples else center
 
         if rw_kwargs.get('unique_nodes'):
@@ -160,7 +164,7 @@ def k_hop_subgraph(center, num_hops, A, sample_ratio=1.0,
         # mask2 = (sub_edge_index[0] != dst) | (sub_edge_index[1] != src)
         # sub_edge_index_revised = sub_edge_index[:, mask1 & mask2]
 
-        ones = starting_nodes.tolist()
+        ones = list(set(original_center).intersection(set(rw_set)))
         zeros = list(set(rw_set) - set(starting_nodes.tolist()))
         # old_new_node_ids = {subnode: counter for counter, subnode in enumerate(sub_nodes.tolist())}
         # ones = [old_new_node_ids[node_id] for node_id in ones]

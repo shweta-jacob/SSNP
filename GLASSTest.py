@@ -34,7 +34,7 @@ parser.add_argument('--use_one', action='store_true')
 parser.add_argument('--use_nodeid', action='store_true')
 # node label settings
 parser.add_argument('--use_maxzeroone', action='store_true')
-parser.add_argument('--samples', type=int, default=0)
+parser.add_argument('--samples', type=float, default=0)
 parser.add_argument('--m', type=int, default=0)
 parser.add_argument('--M', type=int, default=0)
 
