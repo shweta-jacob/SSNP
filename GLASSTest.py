@@ -36,6 +36,9 @@ parser.add_argument('--use_nodeid', action='store_true')
 parser.add_argument('--model', type=int, default=0)
 # node label settings
 parser.add_argument('--use_maxzeroone', action='store_true')
+parser.add_argument('--samples', type=int, default=0)
+parser.add_argument('--m', type=int, default=0)
+parser.add_argument('--M', type=int, default=0)
 
 parser.add_argument('--repeat', type=int, default=1)
 parser.add_argument('--device', type=int, default=0)
@@ -124,7 +127,7 @@ def split():
         row=trn_dataset.edge_index[0], col=trn_dataset.edge_index[1],
         value=torch.arange(E, device="cpu"),
         sparse_sizes=(N, N))
-    rw_kwargs = {"rw_samples": 5, "rw_m": 1, "rw_M": 5, "sparse_adj": sparse_adj,
+    rw_kwargs = {"rw_samples": args.samples, "rw_m": args.m, "rw_M": args.M, "sparse_adj": sparse_adj,
             "edge_index": trn_dataset.edge_index,
             "device": config.device,
             "data": trn_dataset}
