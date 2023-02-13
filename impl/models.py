@@ -66,7 +66,7 @@ class GCN(torch.nn.Module):
 class DGCNN(torch.nn.Module):
     def __init__(self, hidden_channels, output_channels, num_layers, max_z, k=0.6, train_dataset=None,
                  dynamic_train=False, GNN=GCNConv, use_feature=False,
-                 node_embedding=None, dropedge=0.0):
+                 node_embedding=None, dropedge=0.0, synthetic=False):
         super(DGCNN, self).__init__()
 
         self.use_feature = use_feature
@@ -91,7 +91,7 @@ class DGCNN(torch.nn.Module):
         self.convs = ModuleList()
         initial_channels = hidden_channels
 
-        self.convs.append(GNN(initial_channels, hidden_channels))
+        self.convs.append(GNN(initial_channels*2, hidden_channels))
         for i in range(0, num_layers - 1):
             self.convs.append(GNN(hidden_channels, hidden_channels))
         self.convs.append(GNN(hidden_channels, 1))
@@ -109,18 +109,19 @@ class DGCNN(torch.nn.Module):
         dense_dim = (dense_dim - conv1d_kws[1] + 1) * conv1d_channels[1]
         self.dropedge = dropedge
         self.mlp = MLP([dense_dim, 128, output_channels], dropout=0.5)
+        self.synthetic = synthetic
 
     def forward(self, num_nodes, z, edge_index, batch, x=None, edge_weight=None, node_id=None):
         z_emb = self.z_embedding(z)
         if z_emb.ndim == 3:  # in case z has multiple integer labels
             z_emb = z_emb.sum(dim=1)
-        if x is not None:
+        if self.synthetic and x is not None:
             x = torch.cat([z_emb, x.to(torch.float)], 1)
         else:
             x = z_emb
-        # if self.node_embedding is not None and node_id is not None:
-        #     n_emb = self.node_embedding(node_id)
-        #     x = torch.cat([x, n_emb], 1)
+        if not self.synthetic and self.node_embedding is not None and node_id is not None:
+            n_emb = self.node_embedding(node_id)
+            x = torch.cat([x, n_emb], 1)
         xs = [x]
 
         for conv in self.convs:

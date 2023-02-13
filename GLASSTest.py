@@ -204,7 +204,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         raise NotImplementedError
 
     max_z = 1000
-    gnn = GCN(hidden_dim, output_channels, conv_layer, max_z, node_embedding=emb, dropedge=0, synthetic=synthetic).to(config.device)
+    gnn = DGCNN(hidden_dim, output_channels, conv_layer, max_z, node_embedding=emb, dropedge=0, synthetic=synthetic).to(config.device)
     parameters = list(gnn.parameters())
     total_params = sum(p.numel() for param in parameters for p in param)
     print(f'Total number of parameters is {total_params}')
