@@ -37,6 +37,7 @@ parser.add_argument('--samples', type=float, default=0)
 parser.add_argument('--m', type=int, default=0)
 parser.add_argument('--M', type=int, default=0)
 parser.add_argument('--diffusion', action='store_true')
+parser.add_argument('--stochastic', action='store_true')
 
 parser.add_argument('--repeat', type=int, default=1)
 parser.add_argument('--device', type=int, default=0)
@@ -115,9 +116,12 @@ def split():
     max_deg = torch.max(baseG.x)
     baseG.to(config.device)
     # split data
-    trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"), config.device)
-    val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"), config.device)
-    tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"), config.device)
+    trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
+    val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
+    tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
+    trn_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device)
+    val_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic,device=config.device)
+    tst_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic,device=config.device)
     # choice of dataloader
     if args.use_maxzeroone:
 
@@ -199,7 +203,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         raise NotImplementedError
 
     gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]), pooling_layers, args.model, hidden_dim, conv_layer,
-                       args.samples, args.m, args.M, args.diffusion).to(
+                       args.samples, args.m, args.M, args.stochastic, args.diffusion).to(
         config.device)
 
     print("GNN Architecture is as follows")
