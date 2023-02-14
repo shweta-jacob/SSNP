@@ -33,11 +33,12 @@ parser.add_argument('--dataset', type=str, default='ppi_bp')
 parser.add_argument('--use_deg', action='store_true')
 parser.add_argument('--use_one', action='store_true')
 parser.add_argument('--use_nodeid', action='store_true')
-# model 0 means use subgraph emb. model 1 means use complement emb. model 3 means use both subgraph and complement.
-parser.add_argument('--model', type=int, default=0)
 # node label settings
 parser.add_argument('--use_maxzeroone', action='store_true')
 parser.add_argument('--num_hops', type=int, default=0)
+parser.add_argument('--m', type=int, default=1)
+parser.add_argument('--M', type=int, default=5)
+parser.add_argument('--samples', type=float, default=0)
 parser.add_argument('--num_powers', type=int, default=1)
 
 parser.add_argument('--repeat', type=int, default=1)
@@ -134,7 +135,7 @@ def split():
         row=trn_dataset.edge_index[0], col=trn_dataset.edge_index[1],
         value=torch.arange(E, device="cpu"),
         sparse_sizes=(N, N))
-    rw_kwargs = {"rw_m": 0, "rw_M": 5, "sparse_adj": sparse_adj,
+    rw_kwargs = {"rw_m": args.m, "rw_M": args.M, "rw_samples": args.samples, "sparse_adj": sparse_adj,
                  "edge_index": trn_dataset.edge_index,
                  "device": config.device,
                  "data": trn_dataset}
@@ -188,17 +189,6 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         aggr: aggregation method. mean, sum, or gcn.
     '''
     synthetic = True
-    conv = models.EmbZGConv(hidden_dim,
-                            hidden_dim,
-                            conv_layer,
-                            max_deg=max_deg,
-                            activation=nn.ELU(inplace=True),
-                            jk=jk,
-                            dropout=dropout,
-                            conv=functools.partial(GLASSConv,
-                                                   aggr=aggr,
-                                                   dropout=dropout),
-                            gn=True)
 
     emb = baseG.x
     # use pretrained node embeddings.
@@ -207,16 +197,6 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         emb = torch.load(f"./Emb/{args.dataset}_{hidden_dim}.pt",
                          map_location=torch.device('cpu')).detach()
         emb = nn.Embedding.from_pretrained(emb, freeze=False)
-        synthetic = False
-
-    num_rep = 1
-    if args.model == 2:
-        num_rep = 2
-    in_channels = hidden_dim * (conv_layer) * num_rep if jk else hidden_dim
-    mlp = MLP(channel_list=[in_channels, output_channels],
-              act_first=True, act="ELU", dropout=[0.25])
-    # mlp = nn.Linear(hidden_dim * (conv_layer) * num_rep if jk else hidden_dim,
-    #                 output_channels)
 
     pool_fn_fn = {
         "mean": models.MeanPool,
@@ -349,7 +329,7 @@ def test(pool1="size",
             f"end: epoch {i}, train time {sum(trn_time):.2f} s, train {trn_score:.4f} val {val_score:.3f}, tst {tst_score:.3f}",
             flush=True)
         outs.append(tst_score * 100)
-    print(f"Time for {args.dataset} dataset and model {args.model}")
+    print(f"Time for {args.dataset} dataset")
     print(f"Average run time: {np.average(run_times):.3f} with std {np.std(run_times):.3f}")
     print(f"Average preprocessing time: {np.average(preproc_times):.3f} with std {np.std(preproc_times):.3f}")
     print(f"Average train time: {np.average(trn_time):.3f} with std {np.std(trn_time):.3f}")
@@ -360,7 +340,7 @@ def test(pool1="size",
         f"average {tst_average :.3f} error {tst_error :.3f}"
     )
     exp_results = {}
-    exp_results[f"{args.dataset}_model{args.model}"] = {
+    exp_results[f"{args.dataset}"] = {
         "results": {
             "Test Accuracy": f"{tst_average:.2f} error {tst_error:.2f}",
             "Avg runtime": f"{np.average(run_times):.2f} with std {np.std(run_times):.2f}",
@@ -369,7 +349,7 @@ def test(pool1="size",
             "Avg inference time": f"{np.average(inference_time):.2f} with std {np.std(inference_time):.2f}",
         },
     }
-    with open(f"{args.dataset}_model{args.model}_results.json", 'w') as output_file:
+    with open(f"{args.dataset}_samples_{args.samples}_m_{args.m}_M_{args.M}_results.json", 'w') as output_file:
         json.dump(exp_results, output_file)
 
 

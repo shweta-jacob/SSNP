@@ -1,3 +1,5 @@
+import math
+
 import networkx as nx
 import torch_geometric
 from matplotlib import pyplot as plt
@@ -232,54 +234,78 @@ def extract_enclosing_subgraphs(pos, A, x, y, num_hops, powers, node_label='zo',
 
     for idx, center in enumerate(tqdm(pos.tolist())):
         if not rw_kwargs['rw_m']:
-            # tmp = k_hop_subgraph(list(filter(lambda pos: pos != -1, center)), num_hops, A, ratio_per_hop,
-            #                      max_nodes_per_hop, node_features=x, y=y[idx],
-            #                      directed=directed, A_csc=A_csc)
-
-            subset, edge_index, inv, edge_mask = org_k_hop_subgraph(list(filter(lambda pos: pos != -1, center)),
+            subset, sub_edge_index, inv, edge_mask = org_k_hop_subgraph(list(filter(lambda pos: pos != -1, center)),
                                                                     num_hops=num_hops,
                                                                     edge_index=edge_index,
                                                                     num_nodes=x.shape[0])
-            u, v = edge_index
-            u, v = torch.LongTensor(u), torch.LongTensor(v)
-            adj_t = SparseTensor(row=u, col=v,
-                                 sparse_sizes=(x.shape[0], x.shape[0]))
 
-            deg = adj_t.sum(dim=1).to(torch.float)
-            deg_inv_sqrt = deg.pow(-0.5)
-            deg_inv_sqrt[deg_inv_sqrt == float('inf')] = 0
-            adj_t = deg_inv_sqrt.view(-1, 1) * adj_t * deg_inv_sqrt.view(1, -1)
-
-            subset = set(subset.tolist())
             ones = set(filter(lambda pos: pos != -1, center))
-            zeros = subset.difference(ones)
-            subgraph_nodes = list(ones) + list(zeros)
-
-            subgraph_features = x[subgraph_nodes]
-            subgraph = adj_t
-
-            K = powers  # how many powers?
-
-            powers_of_a = [subgraph]
-            for _ in range(K - 1):
-                powers_of_a.append(subgraph @ powers_of_a[-1])
-
-            x_a = torch.cat([torch.ones(size=[len(ones), 1]), torch.zeros(size=[len(zeros), 1])])
-            x_b = subgraph_features
-            subg_x = torch.hstack([x_a, x_b])
-
-            center_indices = [idx for idx in range(len(ones))]
-            all_x = [subg_x[center_indices]]
-            for index, power_of_a in enumerate(powers_of_a):
-                all_x.append((power_of_a @ subg_x)[center_indices])
-
-            x_revised = torch.cat(all_x, dim=-1)
-            data = Data(x=x_revised, y=y[idx])
-
         else:
-            data = k_hop_subgraph(list(filter(lambda pos: pos != -1, center)), num_hops, A, ratio_per_hop,
-                                  max_nodes_per_hop, node_features=x, y=y[idx],
-                                  directed=directed, A_csc=A_csc, rw_kwargs=rw_kwargs)
+            rw_m = rw_kwargs['rw_m']
+            rw_M = rw_kwargs['rw_M']
+            rw_samples = rw_kwargs['rw_samples']
+            sparse_adj = rw_kwargs['sparse_adj']
+            edge_index = rw_kwargs['edge_index']
+            device = rw_kwargs['device']
+            data_org = rw_kwargs['data']
+            center = list(filter(lambda pos: pos != -1, center))
+            original_center = center.copy()
+
+            if rw_samples > 0:
+                rw_samples = math.ceil(len(center) * rw_kwargs['rw_samples'])
+                center = random.sample(center, rw_samples) if len(center) > rw_samples else center
+
+            if rw_kwargs.get('unique_nodes'):
+                nodes = rw_kwargs.get('unique_nodes')[(center)]
+            else:
+                row, col, _ = sparse_adj.csr()
+                starting_nodes = torch.tensor(center, dtype=torch.long, device=device)
+                start = starting_nodes.repeat(rw_M)
+                rw = torch.ops.torch_cluster.random_walk(row, col, start.cpu(), rw_m, 1, 1)[0]
+                nodes = torch.unique(rw.flatten()).tolist()
+
+            rw_set = nodes
+
+            subset, sub_edge_index, mapping, _ = org_k_hop_subgraph(rw_set, 0, edge_index, relabel_nodes=True,
+                                                                       num_nodes=data_org.num_nodes)
+
+            ones = list(set(original_center).intersection(set(rw_set)))
+
+        u, v = sub_edge_index
+        u, v = torch.LongTensor(u), torch.LongTensor(v)
+        adj_t = SparseTensor(row=u, col=v,
+                             sparse_sizes=(x.shape[0], x.shape[0]))
+
+        deg = adj_t.sum(dim=1).to(torch.float)
+        deg_inv_sqrt = deg.pow(-0.5)
+        deg_inv_sqrt[deg_inv_sqrt == float('inf')] = 0
+        adj_t = deg_inv_sqrt.view(-1, 1) * adj_t * deg_inv_sqrt.view(1, -1)
+
+        subset = set(subset.tolist())
+        zeros = subset.difference(ones)
+        subgraph_nodes = list(ones) + list(zeros)
+
+        subgraph_features = x[subgraph_nodes]
+        subgraph = adj_t
+
+        K = powers  # how many powers?
+
+        powers_of_a = [subgraph]
+        for _ in range(K - 1):
+            powers_of_a.append(subgraph @ powers_of_a[-1])
+
+        x_a = torch.cat([torch.ones(size=[len(ones), 1]), torch.zeros(size=[len(zeros), 1])])
+        x_b = subgraph_features
+        subg_x = torch.hstack([x_a, x_b])
+
+        center_indices = [idx for idx in range(len(ones))]
+        all_x = [subg_x[center_indices]]
+        for index, power_of_a in enumerate(powers_of_a):
+            all_x.append((power_of_a @ subg_x)[center_indices])
+
+        x_revised = torch.cat(all_x, dim=-1)
+        data = Data(x=x_revised, y=y[idx])
+
         draw = False
         if draw:
             draw_graph(to_networkx(data))
