@@ -1,3 +1,4 @@
+import math
 import random
 
 import torch
@@ -377,14 +378,15 @@ class GLASS(nn.Module):
             # row, col = edge_index[0].to(device), edge_index[1].to(device)
 
             batch_comp_nodes = []
+            subgraph_nodes_list = []
             for graph_nodes in subG_node:
                 updated_graph_nodes = graph_nodes[graph_nodes != -1].tolist()
                 if self.samples:
                     updated_graph_node_list = updated_graph_nodes
-                    if len(updated_graph_node_list) < self.samples:
+                    if len(updated_graph_node_list) < math.ceil(self.samples * len(updated_graph_node_list)):
                         samples_required = len(updated_graph_node_list)
                     else:
-                        samples_required = self.samples
+                        samples_required = math.ceil(self.samples * len(updated_graph_node_list))
                     starting_for_rw = random.sample(updated_graph_node_list, k=samples_required)
                 else:
                     starting_for_rw = updated_graph_nodes
@@ -392,18 +394,26 @@ class GLASS(nn.Module):
                 start = starting_nodes.repeat(self.M).to(device)
                 node_ids = torch.ops.torch_cluster.random_walk(row, col, start, self.m, 1, 1)[0]
                 rw_nodes = torch.unique(node_ids.flatten()).tolist()
-                complement_nodes = set(rw_nodes).difference(starting_for_rw)
+                subgraph_nodes = set(updated_graph_nodes).intersection(set(rw_nodes))
+                complement_nodes = set(rw_nodes).difference(subgraph_nodes)
 
                 batch_comp_nodes.append(torch.Tensor(list(complement_nodes)))
+                subgraph_nodes_list.append(torch.Tensor(list(subgraph_nodes)))
 
             complement = pad_sequence(batch_comp_nodes, batch_first=True, padding_value=-1).to(torch.int64)
             complement = complement.to(device)
-            batch, pos = pad2batch(subG_node)
+
+            subgraph = pad_sequence(subgraph_nodes_list, batch_first=True, padding_value=-1).to(torch.int64)
+            subgraph = subgraph.to(device)
+
+            batch, pos = pad2batch(subgraph)
             emb_subg = emb[pos]
             emb_subg = pool[0](emb_subg, batch)
+
             batch_comp, pos_comp = pad2batch(complement)
             emb_comp = emb[pos_comp]
             emb_comp = pool[1](emb_comp, batch_comp)
+
             emb = torch.cat([emb_subg, emb_comp], dim=-1)
             if self.diffusion:
                 emb = self.mlp(emb)
