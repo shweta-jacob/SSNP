@@ -176,7 +176,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
     if args.model == 2 and not args.diffusion:
         # if MLP mixing is enabled, num_rep is 1 throughout, else it becomes 2
         num_rep = 2
-        in_channels = hidden_dim * (conv_layer) * num_rep if jk else hidden_dim
+        in_channels = hidden_dim * (conv_layer) * num_rep if jk else hidden_dim * num_rep 
 
     mlp = MLP(channel_list=[in_channels, output_channels], dropout=[0], norm=None, act=None)
     # mlp = nn.Linear(hidden_dim * (1) * num_rep if jk else hidden_dim,
@@ -199,7 +199,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         raise NotImplementedError
 
     gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]), pooling_layers, args.model, hidden_dim, conv_layer,
-                       args.samples, args.m, args.M, args.diffusion).to(
+                       args.samples, args.m, args.M, args.diffusion, jk).to(
         config.device)
 
     print("GNN Architecture is as follows")
@@ -219,7 +219,7 @@ def test(pool1="size",
          hidden_dim=64,
          conv_layer=8,
          dropout=0.3,
-         jk=1,
+         jk=0,
          lr=1e-3,
          z_ratio=0.8,
          batch_size=None,

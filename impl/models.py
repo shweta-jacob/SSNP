@@ -333,7 +333,7 @@ class GLASS(nn.Module):
     '''
 
     def __init__(self, conv: EmbZGConv, preds: nn.ModuleList,
-                 pools: nn.ModuleList, model_type, hidden_dim, conv_layer, samples, m, M, diffusion):
+                 pools: nn.ModuleList, model_type, hidden_dim, conv_layer, samples, m, M, diffusion, jk):
         super().__init__()
         self.conv = conv
         self.preds = preds
@@ -343,9 +343,14 @@ class GLASS(nn.Module):
         self.m = m
         self.M = M
         self.diffusion = diffusion
+        self.jk = jk
         if self.diffusion and self.model_type == 2:
-            self.mlp = torch_geometric.nn.MLP(channel_list=[hidden_dim * conv_layer * 2, hidden_dim * 2, hidden_dim],
-                                          act_first=True, act="ELU", dropout=[0.5, 0.5])
+            if self.jk:
+                inp_channels = hidden_dim * conv_layer * 2
+            else:
+                inp_channels = hidden_dim * 2
+            self.mlp = torch_geometric.nn.MLP(channel_list=[inp_channels, hidden_dim * 2, hidden_dim],
+                                              act_first=True, act="ELU", dropout=[0.5, 0.5])
 
     def NodeEmb(self, x, edge_index, edge_weight):
         embs = []
