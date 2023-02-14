@@ -10,7 +10,7 @@ import torch.nn as nn
 import yaml
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 from torch.optim import Adam
-from torch_geometric.nn import MLP
+from torch_geometric.nn import MLP, SAGEConv, GCNConv
 
 import datasets
 from impl import models, SubGDataset, train, metrics, utils, config
@@ -159,8 +159,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
                             activation=nn.ELU(inplace=True),
                             jk=jk,
                             dropout=dropout,
-                            conv=functools.partial(MyGCNConv,
-                                                   aggr=aggr),
+                            conv=functools.partial(GCNConv),
                             gn=True)
 
     # use pretrained node embeddings.
@@ -196,7 +195,8 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         raise NotImplementedError
 
     gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]),
-                       torch.nn.ModuleList([pool_fn1, pool_fn2]), args.model, hidden_dim, conv_layer, args.samples, args.m, args.M, args.diffusion).to(
+                       torch.nn.ModuleList([pool_fn1, pool_fn2]), args.model, hidden_dim, conv_layer, args.samples,
+                       args.m, args.M, args.diffusion).to(
         config.device)
     parameters = list(gnn.parameters())
     total_params = sum(p.numel() for param in parameters for p in param)
