@@ -191,13 +191,22 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
     if pool1 in pool_fn_fn and pool2 in pool_fn_fn:
         pool_fn1 = pool_fn_fn[pool1]()
         pool_fn2 = pool_fn_fn[pool2]()
+        if args.model == 1 or args.model == 2:
+            pooling_layers = torch.nn.ModuleList([pool_fn1, pool_fn2])
+        else:
+            pooling_layers = torch.nn.ModuleList([pool_fn1])
     else:
         raise NotImplementedError
 
-    gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]),
-                       torch.nn.ModuleList([pool_fn1, pool_fn2]), args.model, hidden_dim, conv_layer, args.samples,
-                       args.m, args.M, args.diffusion).to(
+    gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]), pooling_layers, args.model, hidden_dim, conv_layer,
+                       args.samples, args.m, args.M, args.diffusion).to(
         config.device)
+
+    print("GNN Architecture is as follows")
+    print("-" * 64)
+    print(gnn)
+    print("-" * 64)
+
     parameters = list(gnn.parameters())
     total_params = sum(p.numel() for param in parameters for p in param)
     print(f'Total number of parameters is {total_params}')

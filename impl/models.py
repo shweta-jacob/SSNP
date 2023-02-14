@@ -343,7 +343,7 @@ class GLASS(nn.Module):
         self.m = m
         self.M = M
         self.diffusion = diffusion
-        if self.diffusion:
+        if self.diffusion and self.model_type == 2:
             self.mlp = torch_geometric.nn.MLP(channel_list=[hidden_dim * conv_layer * 2, hidden_dim * 2, hidden_dim],
                                           act_first=True, act="ELU", dropout=[0.5, 0.5])
 
