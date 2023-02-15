@@ -8,7 +8,7 @@ import torch
 
 from ray import tune, init
 from ray.tune import CLIReporter, Stopper
-from ray.tune.schedulers import ASHAScheduler
+from ray.tune.schedulers import ASHAScheduler, FIFOScheduler
 
 import GLASSTest
 
@@ -59,12 +59,8 @@ class ComGraphArguments:
 def ray_tune_helper(identifier, output_path, dataset):
     hyper_class = HyperParameterTuning
 
-    scheduler = ASHAScheduler(
-        metric="val_accuracy",
-        mode="max",
-        max_t=hyper_class.MAX_EPOCHS,
-        grace_period=32,
-        reduction_factor=4)
+    scheduler = FIFOScheduler()
+    scheduler.set_search_properties(metric='val_accuracy', mode='max')
 
     reporter = CLIReporter(metric_columns=["loss", "val_accuracy", "training_iteration"])
     base_args = ComGraphArguments(dataset)
