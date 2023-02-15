@@ -321,10 +321,10 @@ def ray_tune_run_helper(config, argument_class, device):
     argument_class.diffusion = config['diffusion']
     argument_class.device = device
 
-    run_helper(argument_class)
+    run_helper(argument_class, hypertuning=True)
 
 
-def run_helper(argument_class):
+def run_helper(argument_class, hypertuning=False):
     config.set_device(argument_class.device)
 
     if argument_class.use_seed:
@@ -374,7 +374,8 @@ def run_helper(argument_class):
     print("-" * 64)
 
     split(argument_class)
-    params.update({'args': argument_class})
+    params.update({'args': argument_class,
+                   'hypertuning': hypertuning})
     test(**(params))
 
 
