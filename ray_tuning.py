@@ -8,7 +8,6 @@ import torch
 from ray import tune
 from ray.tune import CLIReporter, Stopper
 from ray.tune.schedulers import ASHAScheduler
-from torch_geometric import seed_everything
 
 import GLASSTest
 
@@ -61,15 +60,12 @@ def ray_tune_helper(identifier, output_path, dataset):
         metric="val_accuracy",
         mode="max",
         max_t=hyper_class.MAX_EPOCHS,
-        grace_period=1,
-        reduction_factor=2)
+        grace_period=32)
     reporter = CLIReporter(metric_columns=["loss", "val_accuracy", "training_iteration"])
     base_args = ComGraphArguments(dataset)
 
     device = torch.device('cuda')
     print(f"Using device: {device} for running ray tune")
-
-    seed_everything(42)
 
     result = tune.run(
         tune.with_parameters(GLASSTest.ray_tune_run_helper, argument_class=base_args, device=0),

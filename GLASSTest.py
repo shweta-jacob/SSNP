@@ -276,8 +276,9 @@ def test(pool1="size",
                             f"Best picked so far- val: {val_score:.4f} tst: {tst_score:.4f}, early stop: {early_stop} \n")
             if val_score >= 1 - 1e-5:
                 early_stop += 1
-            # if early_stop > 100 / num_div:
-            #     break
+            if early_stop >= 50:
+                print("Patience exhausted. Early stopping.")
+                break
         end_time = time.time()
         run_time = end_time - start_time
         run_times.append(run_time)
