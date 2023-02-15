@@ -93,6 +93,9 @@ def ray_tune_helper(identifier, output_path, dataset):
     print("Best trial final train loss: {}".format(best_trial.last_result["loss"]))
     print("Best trial final validation accuracy: {}".format(best_trial.last_result["val_accuracy"]))
 
+    reporter._max_progress_rows = 4 * 3 * 3 * 2 * 1
+    reporter.report(result.trials, done=True)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
