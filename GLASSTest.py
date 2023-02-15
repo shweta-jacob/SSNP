@@ -320,7 +320,6 @@ def ray_tune_run_helper(config, argument_class, device):
     argument_class.m = config['m']
     argument_class.M = config['M']
     argument_class.samples = config['samples']
-    argument_class.stochastic = config['stochastic']
     argument_class.diffusion = config['diffusion']
     argument_class.device = device
 
