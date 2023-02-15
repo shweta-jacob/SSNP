@@ -28,7 +28,7 @@ class HyperParameterTuning:
     MAX_EPOCHS = 300
     CPUS_AVAIL = 20
     GPUS_AVAIL = 1
-    NUM_SAMPLES = 5
+    NUM_SAMPLES = 1
 
     seed = 42
 
@@ -36,7 +36,6 @@ class HyperParameterTuning:
         "m": tune.grid_search([1, 5, 10, 25, 50]),
         "M": tune.grid_search([1, 5, 10, 25, 50]),
         "samples": tune.grid_search([0.25, 0.50, 0.75, 1.0]),
-        "stochastic": tune.grid_search([True, False]),
         "diffusion": tune.grid_search([True, False]),
     }
 
@@ -51,6 +50,7 @@ class ComGraphArguments:
         self.use_deg = False
         self.use_one = False
         self.use_maxzeroone = False
+        self.stochastic = True
 
 
 def ray_tune_helper(identifier, output_path, dataset):
@@ -60,7 +60,9 @@ def ray_tune_helper(identifier, output_path, dataset):
         metric="val_accuracy",
         mode="max",
         max_t=hyper_class.MAX_EPOCHS,
-        grace_period=32)
+        grace_period=32,
+        reduction_factor=4)
+
     reporter = CLIReporter(metric_columns=["loss", "val_accuracy", "training_iteration"])
     base_args = ComGraphArguments(dataset)
 
