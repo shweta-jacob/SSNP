@@ -122,6 +122,10 @@ def split():
     trn_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device)
     val_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device)
     tst_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device)
+
+    trn_dataset = trn_dataset.to(config.device)
+    val_dataset = val_dataset.to(config.device)
+    tst_dataset = tst_dataset.to(config.device)
     # choice of dataloader
     if args.use_maxzeroone:
 
