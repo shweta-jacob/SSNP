@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import yaml
+from ray import tune
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 from torch.optim import Adam
 from torch_geometric.nn import MLP, GCNConv
@@ -20,31 +21,10 @@ import warnings
 warnings.simplefilter('ignore', FutureWarning)
 warnings.simplefilter('ignore', UserWarning)
 
-parser = argparse.ArgumentParser(description='')
-# Dataset settings
-parser.add_argument('--dataset', type=str, default='ppi_bp')
-# Node feature settings. 
-# deg means use node degree. one means use homogeneous embeddings.
-# nodeid means use pretrained node embeddings in ./Emb
-parser.add_argument('--use_deg', action='store_true')
-parser.add_argument('--use_one', action='store_true')
-parser.add_argument('--use_nodeid', action='store_true')
-# model 0 means use subgraph emb. model 1 means use complement emb. model 3 means use both subgraph and complement.
-parser.add_argument('--model', type=int, default=0)
-# node label settings
-parser.add_argument('--use_maxzeroone', action='store_true')
-parser.add_argument('--samples', type=float, default=0)
-parser.add_argument('--m', type=int, default=0)
-parser.add_argument('--M', type=int, default=0)
-parser.add_argument('--diffusion', action='store_true')
-parser.add_argument('--stochastic', action='store_true')
-
-parser.add_argument('--repeat', type=int, default=1)
-parser.add_argument('--device', type=int, default=0)
-parser.add_argument('--use_seed', action='store_true')
-
-args = parser.parse_args()
-config.set_device(args.device)
+trn_dataset, val_dataset, tst_dataset = None, None, None
+max_deg, output_channels = 0, 1
+score_fn = None
+loss_fn = None
 
 
 def set_seed(seed: int):
@@ -56,42 +36,7 @@ def set_seed(seed: int):
     torch.cuda.manual_seed_all(seed)  # multi gpu
 
 
-if args.use_seed:
-    set_seed(0)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.enabled = False
-
-baseG = datasets.load_dataset(args.dataset)
-
-trn_dataset, val_dataset, tst_dataset = None, None, None
-max_deg, output_channels = 0, 1
-score_fn = None
-
-if baseG.y.unique().shape[0] == 2:
-    # binary classification task
-    def loss_fn(x, y):
-        return BCEWithLogitsLoss()(x.flatten(), y.flatten())
-
-
-    baseG.y = baseG.y.to(torch.float)
-    if baseG.y.ndim > 1:
-        output_channels = baseG.y.shape[1]
-    else:
-        output_channels = 1
-    score_fn = metrics.binaryf1
-else:
-    # multi-class classification task
-    baseG.y = baseG.y.to(torch.int64)
-    loss_fn = CrossEntropyLoss()
-    output_channels = baseG.y.unique().shape[0]
-    score_fn = metrics.microf1
-
-loader_fn = SubGDataset.GDataloader
-tloader_fn = SubGDataset.GDataloader
-
-
-def split():
+def split(args):
     '''
     load and split dataset.
     '''
@@ -150,7 +95,7 @@ def split():
             return SubGDataset.GDataloader(ds, bs, shuffle=True)
 
 
-def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr):
+def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr, args=None):
     '''
     Build a GLASS model.
     Args:
@@ -173,7 +118,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
     # use pretrained node embeddings.
     if args.use_nodeid:
         print("load ", f"./Emb/{args.dataset}_{hidden_dim}.pt")
-        emb = torch.load(f"./Emb/{args.dataset}_{hidden_dim}.pt",
+        emb = torch.load(f"/media/nvme/poll/extended-GLASS/Emb/{args.dataset}_{hidden_dim}.pt",
                          map_location=torch.device('cpu')).detach()
         conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
 
@@ -234,7 +179,9 @@ def test(pool1="size",
          lr=1e-3,
          z_ratio=0,
          batch_size=None,
-         resi=0):
+         resi=0,
+         hypertuning=False,
+         args=None):
     '''
     Test a set of hyperparameters in a task.
     Args:
@@ -260,9 +207,9 @@ def test(pool1="size",
         set_seed(repeat + 1)
         print(f"repeat {repeat}")
         start_pre = time.time()
-        split()
+        split(args)
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio,
-                         aggr)
+                         aggr, args)
         trn_loader = loader_fn(trn_dataset, batch_size)
         val_loader = tloader_fn(val_dataset, batch_size)
         tst_loader = tloader_fn(tst_dataset, batch_size)
@@ -282,6 +229,8 @@ def test(pool1="size",
                                       val_loader,
                                       score_fn,
                                       loss_fn=loss_fn, device=config.device)
+                if hypertuning:
+                    tune.report(loss=loss, val_accuracy=score)
 
                 if score > val_score:
                     early_stop = 0
@@ -364,18 +313,92 @@ def test(pool1="size",
         json.dump(exp_results, output_file)
 
 
-print("-" * 64)
-print("User input args", "->")
-print(args)
+def ray_tune_run_helper(config, argument_class):
+    argument_class.m = config['m']
+    argument_class.M = config['M']
+    argument_class.samples = config['samples']
+    argument_class.stochastic = config['stochastic']
+    argument_class.diffusion = config['diffusion']
 
-# read configuration
-with open(f"compl-config/{args.dataset}.yml") as f:
-    params = yaml.safe_load(f)
-print("-" * 64)
+    run_helper(argument_class)
 
-print("Loaded YAML", "->" )
-pprint(params)
-print("-" * 64)
 
-split()
-test(**(params))
+def run_helper(argument_class):
+    if argument_class.use_seed:
+        set_seed(0)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.enabled = False
+
+    baseG = datasets.load_dataset(argument_class.dataset)
+
+    global trn_dataset, val_dataset, tst_dataset
+    global max_deg, output_channels
+    global score_fn, loss_fn
+
+    if baseG.y.unique().shape[0] == 2:
+        # binary classification task
+        def loss_fn(x, y):
+            return BCEWithLogitsLoss()(x.flatten(), y.flatten())
+
+        baseG.y = baseG.y.to(torch.float)
+        if baseG.y.ndim > 1:
+            output_channels = baseG.y.shape[1]
+        else:
+            output_channels = 1
+        score_fn = metrics.binaryf1
+    else:
+        # multi-class classification task
+        baseG.y = baseG.y.to(torch.int64)
+        loss_fn = CrossEntropyLoss()
+        output_channels = baseG.y.unique().shape[0]
+        score_fn = metrics.microf1
+
+    loader_fn = SubGDataset.GDataloader
+    tloader_fn = SubGDataset.GDataloader
+
+    print("-" * 64)
+    print("User input args", "->")
+    print(argument_class)
+
+    # read configuration
+    with open(f"/media/nvme/poll/extended-GLASS/compl-config/{argument_class.dataset}.yml") as f:
+        params = yaml.safe_load(f)
+    print("-" * 64)
+
+    print("Loaded YAML", "->")
+    pprint(params)
+    print("-" * 64)
+
+    split(argument_class)
+    params.update({'args': argument_class})
+    test(**(params))
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='')
+    # Dataset settings
+    parser.add_argument('--dataset', type=str, default='ppi_bp')
+    # Node feature settings.
+    # deg means use node degree. one means use homogeneous embeddings.
+    # nodeid means use pretrained node embeddings in ./Emb
+    parser.add_argument('--use_deg', action='store_true')
+    parser.add_argument('--use_one', action='store_true')
+    parser.add_argument('--use_nodeid', action='store_true')
+    # model 0 means use subgraph emb. model 1 means use complement emb. model 3 means use both subgraph and complement.
+    parser.add_argument('--model', type=int, default=0)
+    # node label settings
+    parser.add_argument('--use_maxzeroone', action='store_true')
+    parser.add_argument('--samples', type=float, default=0)
+    parser.add_argument('--m', type=int, default=0)
+    parser.add_argument('--M', type=int, default=0)
+    parser.add_argument('--diffusion', action='store_true')
+    parser.add_argument('--stochastic', action='store_true')
+
+    parser.add_argument('--repeat', type=int, default=1)
+    parser.add_argument('--device', type=int, default=0)
+    parser.add_argument('--use_seed', action='store_true')
+
+    args = parser.parse_args()
+    config.set_device(args.device)
+    run_helper(args)
