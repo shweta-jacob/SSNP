@@ -204,7 +204,7 @@ def test(pool1="size",
     preproc_times = []
     for repeat in range(args.repeat):
         start_time = time.time()
-        set_seed(repeat + 1)
+        # set_seed(repeat + 1)
         print(f"repeat {repeat}")
         start_pre = time.time()
         split(args)
@@ -328,7 +328,7 @@ def run_helper(argument_class, hypertuning=False):
     config.set_device(argument_class.device)
 
     if argument_class.use_seed:
-        set_seed(0)
+        # set_seed(0)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.enabled = False

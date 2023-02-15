@@ -1,6 +1,5 @@
 import argparse
 import json
-import math
 import os
 import time
 from pathlib import Path
@@ -30,7 +29,7 @@ class HyperParameterTuning:
     MAX_EPOCHS = 300
     CPUS_AVAIL = 20
     GPUS_AVAIL = 1
-    NUM_SAMPLES = int(math.pow(2, 5))
+    NUM_SAMPLES = 5
 
     seed = 42
 
