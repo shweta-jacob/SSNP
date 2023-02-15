@@ -81,7 +81,8 @@ def ray_tune_helper(identifier, output_path, dataset):
         local_dir=os.path.join(identifier, output_path),
         log_to_file=True,
         stop=TimeStopper(),
-        resume="AUTO"
+        resume="AUTO",
+        raise_on_failed_trial=False
     )
     best_trial = result.get_best_trial("val_accuracy", "max", "last-10-avg")
 
