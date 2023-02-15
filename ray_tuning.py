@@ -64,7 +64,7 @@ def ray_tune_helper(identifier, output_path, dataset):
     scheduler.set_search_properties(metric='val_accuracy', mode='max')
 
     reporter = CLIReporter(metric_columns=["loss", "val_accuracy", "training_iteration", "test_accuracy"],
-                           sort_by_metric="val_accuracy", max_progress_rows=50)
+                           sort_by_metric="val_accuracy", max_progress_rows=25)
     base_args = ComGraphArguments(dataset)
 
     device = torch.device('cuda')
