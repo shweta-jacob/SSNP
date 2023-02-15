@@ -333,7 +333,7 @@ class GLASS(nn.Module):
     '''
 
     def __init__(self, conv: EmbZGConv, preds: nn.ModuleList,
-                 pools: nn.ModuleList, model_type, hidden_dim, conv_layer, samples, m, M, diffusion):
+                 pools: nn.ModuleList, model_type, hidden_dim, conv_layer, samples, m, M, stochastic, diffusion):
         super().__init__()
         self.conv = conv
         self.preds = preds
@@ -342,6 +342,7 @@ class GLASS(nn.Module):
         self.samples = samples
         self.m = m
         self.M = M
+        self.stochastic = stochastic
         self.diffusion = diffusion
         if self.diffusion and self.model_type == 2:
             self.mlp = torch_geometric.nn.MLP(channel_list=[hidden_dim * conv_layer * 2, hidden_dim * 2, hidden_dim],
@@ -376,41 +377,43 @@ class GLASS(nn.Module):
             # row = torch.tensor(list(map(lambda x: x[0], G.edges())))
             # col = torch.tensor(list(map(lambda x: x[1], G.edges())))
             # row, col = edge_index[0].to(device), edge_index[1].to(device)
-
-            batch_comp_nodes = []
-            subgraph_nodes_list = []
-            for graph_nodes in subG_node:
-                updated_graph_nodes = graph_nodes[graph_nodes != -1].tolist()
-                if self.samples:
-                    updated_graph_node_list = updated_graph_nodes
-                    if len(updated_graph_node_list) < math.ceil(self.samples * len(updated_graph_node_list)):
-                        samples_required = len(updated_graph_node_list)
+            if self.stochastic:
+                batch_comp_nodes = []
+                subgraph_nodes_list = []
+                for graph_nodes in subG_node:
+                    updated_graph_nodes = graph_nodes[graph_nodes != -1].tolist()
+                    if self.samples:
+                        updated_graph_node_list = updated_graph_nodes
+                        if len(updated_graph_node_list) < math.ceil(self.samples * len(updated_graph_node_list)):
+                            samples_required = len(updated_graph_node_list)
+                        else:
+                            samples_required = math.ceil(self.samples * len(updated_graph_node_list))
+                        starting_for_rw = random.sample(updated_graph_node_list, k=samples_required)
                     else:
-                        samples_required = math.ceil(self.samples * len(updated_graph_node_list))
-                    starting_for_rw = random.sample(updated_graph_node_list, k=samples_required)
-                else:
-                    starting_for_rw = updated_graph_nodes
-                starting_nodes = torch.tensor(starting_for_rw, dtype=torch.long)
-                start = starting_nodes.repeat(self.M).to(device)
-                node_ids = torch.ops.torch_cluster.random_walk(row, col, start, self.m, 1, 1)[0]
-                rw_nodes = torch.unique(node_ids.flatten()).tolist()
-                subgraph_nodes = set(updated_graph_nodes).intersection(set(rw_nodes))
-                complement_nodes = set(rw_nodes).difference(subgraph_nodes)
+                        starting_for_rw = updated_graph_nodes
+                    starting_nodes = torch.tensor(starting_for_rw, dtype=torch.long)
+                    start = starting_nodes.repeat(self.M).to(device)
+                    node_ids = torch.ops.torch_cluster.random_walk(row, col, start, self.m, 1, 1)[0]
+                    rw_nodes = torch.unique(node_ids.flatten()).tolist()
+                    subgraph_nodes = set(updated_graph_nodes).intersection(set(rw_nodes))
+                    complement_nodes = set(rw_nodes).difference(subgraph_nodes)
 
-                batch_comp_nodes.append(torch.Tensor(list(complement_nodes)))
-                subgraph_nodes_list.append(torch.Tensor(list(subgraph_nodes)))
+                    batch_comp_nodes.append(torch.Tensor(list(complement_nodes)))
+                    subgraph_nodes_list.append(torch.Tensor(list(subgraph_nodes)))
 
-            complement = pad_sequence(batch_comp_nodes, batch_first=True, padding_value=-1).to(torch.int64)
-            complement = complement.to(device)
+                complement = pad_sequence(batch_comp_nodes, batch_first=True, padding_value=-1).to(torch.int64)
+                complement = complement.to(device)
+                comp_node = complement
 
-            subgraph = pad_sequence(subgraph_nodes_list, batch_first=True, padding_value=-1).to(torch.int64)
-            subgraph = subgraph.to(device)
+                subgraph = pad_sequence(subgraph_nodes_list, batch_first=True, padding_value=-1).to(torch.int64)
+                subgraph = subgraph.to(device)
+                subG_node = subgraph
 
-            batch, pos = pad2batch(subgraph)
+            batch, pos = pad2batch(subG_node)
             emb_subg = emb[pos]
             emb_subg = pool[0](emb_subg, batch)
 
-            batch_comp, pos_comp = pad2batch(complement)
+            batch_comp, pos_comp = pad2batch(comp_node)
             emb_comp = emb[pos_comp]
             emb_comp = pool[1](emb_comp, batch_comp)
 

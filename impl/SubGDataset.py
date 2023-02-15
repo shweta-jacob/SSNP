@@ -1,7 +1,12 @@
+import math
+import random
+
 from torch.nn.utils.rnn import pad_sequence
 from torch_geometric.data import Data
 import torch
 from torch.utils.data import DataLoader
+from torch_sparse import SparseTensor
+from tqdm import tqdm
 
 
 class GDataset:
@@ -13,13 +18,13 @@ class GDataset:
             For example, [[0, 1, 2], [6, 7, -1]] means two subgraphs containing nodes 0, 1, 2 and 6, 7 respectively.
         y : the target of subgraphs.
     '''
-    def __init__(self, x, edge_index, edge_attr, pos, y, device):
+    def __init__(self, x, edge_index, edge_attr, pos, y):
         self.x=x
         self.edge_index=edge_index
         self.edge_attr=edge_attr
         self.y=y
         self.pos=pos
-        self.comp = self.get_complement(device)
+        self.comp=pos
         self.num_nodes = x.shape[0]
 
     def __len__(self):
@@ -28,13 +33,41 @@ class GDataset:
     def __getitem__(self, idx):
         return self.pos[idx], self.y[idx]
 
-    def get_complement(self, device):
-        complement = []
-        for subgraph in self.pos:
-            subgraph = list(filter(lambda node: node != -1, subgraph.tolist()))
-            subg_comp = torch.Tensor(list(set(range(self.x.shape[0])).difference(subgraph)))
-            complement.append(subg_comp.to(device))
-        return pad_sequence(complement, batch_first=True, padding_value=-1).to(torch.int64)
+    def sample_pos_comp(self, samples, m, M, stoch, device):
+        if not stoch:
+            print("Setting up non-stochastic data")
+            N = self.x.shape[0]
+            E = self.edge_index.size()[-1]
+            sparse_adj = SparseTensor(
+                row=self.edge_index[0].to(device), col=self.edge_index[1].to(device),
+                value=torch.arange(E, device=device),
+                sparse_sizes=(N, N))
+            row, col, _ = sparse_adj.csr()
+            batch_comp_nodes = []
+            subgraph_nodes_list = []
+            for graph_nodes in tqdm(self.pos, ncols=70):
+                updated_graph_nodes = graph_nodes[graph_nodes != -1].tolist()
+                if samples:
+                    updated_graph_node_list = updated_graph_nodes
+                    if len(updated_graph_node_list) < math.ceil(samples * len(updated_graph_node_list)):
+                        samples_required = len(updated_graph_node_list)
+                    else:
+                        samples_required = math.ceil(samples * len(updated_graph_node_list))
+                    starting_for_rw = random.sample(updated_graph_node_list, k=samples_required)
+                else:
+                    starting_for_rw = updated_graph_nodes
+                starting_nodes = torch.tensor(starting_for_rw, dtype=torch.long)
+                start = starting_nodes.repeat(M).to(device)
+                node_ids = torch.ops.torch_cluster.random_walk(row, col, start, m, 1, 1)[0]
+                rw_nodes = torch.unique(node_ids.flatten()).tolist()
+                subgraph_nodes = set(updated_graph_nodes).intersection(set(rw_nodes))
+                complement_nodes = set(rw_nodes).difference(subgraph_nodes)
+
+                batch_comp_nodes.append(torch.Tensor(list(complement_nodes)))
+                subgraph_nodes_list.append(torch.Tensor(list(subgraph_nodes)))
+
+            self.pos = pad_sequence(subgraph_nodes_list, batch_first=True, padding_value=-1).to(torch.int64)
+            self.comp = pad_sequence(batch_comp_nodes, batch_first=True, padding_value=-1).to(torch.int64)
 
     def to(self, device):
         self.x = self.x.to(device)
