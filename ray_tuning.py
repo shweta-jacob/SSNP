@@ -72,7 +72,7 @@ def ray_tune_helper(identifier, output_path, dataset):
     seed_everything(42)
 
     result = tune.run(
-        tune.with_parameters(GLASSTest.ray_tune_run_helper, argument_class=base_args, device=device),
+        tune.with_parameters(GLASSTest.ray_tune_run_helper, argument_class=base_args, device=0),
         resources_per_trial={"cpu": hyper_class.CPUS_AVAIL, "gpu": hyper_class.GPUS_AVAIL},
         config=hyper_class.CONFIG,
         num_samples=hyper_class.NUM_SAMPLES,
