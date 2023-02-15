@@ -38,7 +38,7 @@ class HyperParameterTuning:
     CONFIG = {
         "m": tune.grid_search([1, 5, 10, 25, 50]),
         "M": tune.grid_search([1, 5, 10, 25, 50]),
-        "samples": tune.grid_search([0.25, 0.50, 0.75, 1.0]),
+        "samples": tune.grid_search([0.50, 0.75, 1.0]),
         "diffusion": tune.grid_search([True, False]),
     }
 
