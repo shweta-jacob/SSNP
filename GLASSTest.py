@@ -3,6 +3,7 @@ import functools
 import json
 import random
 import time
+from pprint import pprint
 
 import numpy as np
 import torch
@@ -10,11 +11,10 @@ import torch.nn as nn
 import yaml
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 from torch.optim import Adam
-from torch_geometric.nn import MLP, SAGEConv, GCNConv
+from torch_geometric.nn import MLP, GCNConv
 
 import datasets
 from impl import models, SubGDataset, train, metrics, utils, config
-from impl.models import GLASSConv, MyGCNConv
 import warnings
 
 warnings.simplefilter('ignore', FutureWarning)
@@ -210,14 +210,17 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
                        args.samples, args.m, args.M, args.stochastic, args.diffusion).to(
         config.device)
 
-    print("GNN Architecture is as follows")
     print("-" * 64)
+    print("GNN Architecture is as follows")
     print(gnn)
     print("-" * 64)
 
     parameters = list(gnn.parameters())
     total_params = sum(p.numel() for param in parameters for p in param)
+
     print(f'Total number of parameters is {total_params}')
+    print("-" * 64)
+
     return gnn
 
 
@@ -361,11 +364,18 @@ def test(pool1="size",
         json.dump(exp_results, output_file)
 
 
+print("-" * 64)
+print("User input args", "->")
 print(args)
+
 # read configuration
 with open(f"compl-config/{args.dataset}.yml") as f:
     params = yaml.safe_load(f)
+print("-" * 64)
 
-print("params", params, flush=True)
+print("Loaded YAML", "->" )
+pprint(params)
+print("-" * 64)
+
 split()
 test(**(params))
