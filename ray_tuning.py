@@ -82,7 +82,7 @@ def ray_tune_helper(identifier, output_path, dataset):
         stop=TimeStopper(),
         resume="AUTO",
         raise_on_failed_trial=False,
-        verbose=Verbosity.V0_MINIMAL,
+        verbose=Verbosity.V1_EXPERIMENT,
     )
     best_trial = result.get_best_trial("val_accuracy", "max", "last")
 
