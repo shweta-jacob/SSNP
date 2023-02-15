@@ -27,7 +27,7 @@ class TimeStopper(Stopper):
 
 class HyperParameterTuning:
     MAX_EPOCHS = 300
-    CPUS_AVAIL = 64
+    CPUS_AVAIL = 20
     GPUS_AVAIL = 1
     NUM_SAMPLES = 5
 
