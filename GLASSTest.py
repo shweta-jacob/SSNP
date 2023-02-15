@@ -231,11 +231,6 @@ def test(pool1="size",
     '''
     outs = []
     t1 = time.time()
-    # we set batch_size = tst_dataset.y.shape[0] // num_div.
-    num_div = tst_dataset.y.shape[0] / batch_size
-    # we use num_div to calculate the number of iteration per epoch and count the number of iteration.
-    if args.dataset in ["density", "component", "cut_ratio", "coreness"]:
-        num_div /= 5
 
     outs = []
     run_times = []
@@ -247,7 +242,7 @@ def test(pool1="size",
         set_seed(repeat + 1)
         print(f"repeat {repeat}")
         start_pre = time.time()
-        # split()
+        split()
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio,
                          aggr)
         # trn_loader = loader_fn(trn_dataset, batch_size)
@@ -311,8 +306,6 @@ def test(pool1="size",
                         print(f"Best so far- val {val_score:.4f} tst {tst_score:.4f}")
             if val_score >= 1 - 1e-5:
                 early_stop += 1
-            # if early_stop > 100 / num_div:
-            #     break
         end_time = time.time()
         run_time = end_time - start_time
         run_times.append(run_time)
@@ -351,5 +344,4 @@ with open(f"compl-config/{args.dataset}.yml") as f:
     params = yaml.safe_load(f)
 
 print("params", params, flush=True)
-split()
 test(**(params))
