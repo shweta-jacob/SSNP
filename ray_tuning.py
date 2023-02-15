@@ -5,11 +5,14 @@ import time
 from pathlib import Path
 
 import torch
-from ray import tune
+
+from ray import tune, init
 from ray.tune import CLIReporter, Stopper
 from ray.tune.schedulers import ASHAScheduler
 
 import GLASSTest
+
+init(log_to_driver=False)
 
 
 class TimeStopper(Stopper):
