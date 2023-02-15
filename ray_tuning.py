@@ -29,7 +29,7 @@ class HyperParameterTuning:
     MAX_EPOCHS = 300
     CPUS_AVAIL = 20
     GPUS_AVAIL = 1
-    NUM_SAMPLES = 5
+    NUM_SAMPLES = 1
 
     seed = 42
 
