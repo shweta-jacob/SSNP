@@ -8,7 +8,7 @@ import torch
 
 from ray import tune, init
 from ray.tune import CLIReporter, Stopper
-from ray.tune.schedulers import ASHAScheduler, FIFOScheduler
+from ray.tune.schedulers import FIFOScheduler
 
 import GLASSTest
 
@@ -33,11 +33,11 @@ class HyperParameterTuning:
     GPUS_AVAIL = 1
     NUM_SAMPLES = 1
 
-    seed = 42
+    seed = 42  # not used
 
     CONFIG = {
-        "m": tune.grid_search([1, 5, 10, 25, 50]),
-        "M": tune.grid_search([1, 5, 10, 25, 50]),
+        "m": tune.grid_search([1, 5, 10, 50]),
+        "M": tune.grid_search([1, 5, 10]),
         "samples": tune.grid_search([0.50, 0.75, 1.0]),
         "diffusion": tune.grid_search([True, False]),
     }
@@ -62,7 +62,7 @@ def ray_tune_helper(identifier, output_path, dataset):
     scheduler = FIFOScheduler()
     scheduler.set_search_properties(metric='val_accuracy', mode='max')
 
-    reporter = CLIReporter(metric_columns=["loss", "val_accuracy", "training_iteration"])
+    reporter = CLIReporter(metric_columns=["loss", "val_accuracy", "training_iteration", "test_accuracy"])
     base_args = ComGraphArguments(dataset)
 
     device = torch.device('cuda')
