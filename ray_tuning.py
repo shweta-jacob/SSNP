@@ -1,31 +1,18 @@
 import argparse
 import json
 import os
-import time
 from pathlib import Path
 
 import torch
 
 from ray import tune, init
-from ray.tune import CLIReporter, Stopper
+from ray.tune import CLIReporter
 from ray.tune.schedulers import FIFOScheduler
 from ray.tune.utils.log import Verbosity
 
 import GLASSTest
 
 init(log_to_driver=False)
-
-
-class TimeStopper(Stopper):
-    def __init__(self):
-        self._start = time.time()
-        self._deadline = 60 * 45  # 45 minutes max run across all experiments
-
-    def __call__(self, trial_id, result):
-        return False
-
-    def stop_all(self):
-        return time.time() - self._start > self._deadline
 
 
 class HyperParameterTuning:
@@ -79,7 +66,6 @@ def ray_tune_helper(identifier, output_path, dataset):
         progress_reporter=reporter,
         local_dir=os.path.join(identifier, output_path),
         log_to_file=True,
-        stop=TimeStopper(),
         resume="AUTO",
         raise_on_failed_trial=False,
         verbose=Verbosity.V1_EXPERIMENT,
