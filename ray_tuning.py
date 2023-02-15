@@ -27,8 +27,8 @@ class TimeStopper(Stopper):
 
 class HyperParameterTuning:
     MAX_EPOCHS = 300
-    CPUS_AVAIL = 1
-    GPUS_AVAIL = 0
+    CPUS_AVAIL = 80
+    GPUS_AVAIL = 4
     NUM_SAMPLES = 1
 
     seed = 42
@@ -66,7 +66,7 @@ def ray_tune_helper(identifier, output_path, dataset):
     reporter = CLIReporter(metric_columns=["loss", "val_accuracy", "training_iteration"])
     base_args = ComGraphArguments(dataset)
 
-    device = torch.device('cpu')
+    device = torch.device('cuda')
     print(f"Using device: {device} for running ray tune")
 
     seed_everything(42)
