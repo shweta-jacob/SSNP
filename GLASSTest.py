@@ -1,6 +1,7 @@
 import argparse
 import functools
 import json
+import os.path
 import random
 import time
 from pprint import pprint
@@ -36,14 +37,14 @@ def set_seed(seed: int):
     torch.cuda.manual_seed_all(seed)  # multi gpu
 
 
-def split(args):
+def split(args, hypertuning=False):
     '''
     load and split dataset.
     '''
     # initialize and split dataset
     global trn_dataset, val_dataset, tst_dataset, baseG
     global max_deg, output_channels, loader_fn, tloader_fn
-    baseG = datasets.load_dataset(args.dataset)
+    baseG = datasets.load_dataset(args.dataset, hypertuning)
     if baseG.y.unique().shape[0] == 2:
         baseG.y = baseG.y.to(torch.float)
     else:
@@ -95,7 +96,7 @@ def split(args):
             return SubGDataset.GDataloader(ds, bs, shuffle=True)
 
 
-def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr, args=None):
+def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr, args=None, hypertuning=False):
     '''
     Build a GLASS model.
     Args:
@@ -118,8 +119,10 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
     # use pretrained node embeddings.
     if args.use_nodeid:
         print("load ", f"./Emb/{args.dataset}_{hidden_dim}.pt")
-        emb = torch.load(f"/media/nvme/poll/extended-GLASS/Emb/{args.dataset}_{hidden_dim}.pt",
-                         map_location=torch.device('cpu')).detach()
+        path_to_emb = f"Emb/{args.dataset}_{hidden_dim}.pt"
+        if hypertuning:
+            path_to_emb = os.path.join('/media/nvme/poll/extended-GLASS/', path_to_emb)
+        emb = torch.load(path_to_emb, map_location=torch.device('cpu')).detach()
         conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
 
     num_rep = 1
@@ -204,12 +207,13 @@ def test(pool1="size",
     preproc_times = []
     for repeat in range(args.repeat):
         start_time = time.time()
-        # set_seed(repeat + 1)
+        if not hypertuning:
+            set_seed(repeat + 1)
         print(f"repeat {repeat}")
         start_pre = time.time()
-        split(args)
+        split(args, hypertuning)
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio,
-                         aggr, args)
+                         aggr, args, hypertuning)
         trn_loader = loader_fn(trn_dataset, batch_size)
         val_loader = tloader_fn(val_dataset, batch_size)
         tst_loader = tloader_fn(tst_dataset, batch_size)
@@ -330,12 +334,13 @@ def run_helper(argument_class, hypertuning=False):
     config.set_device(argument_class.device)
 
     if argument_class.use_seed:
-        # set_seed(0)
+        if not hypertuning:
+            set_seed(0)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.enabled = False
 
-    baseG = datasets.load_dataset(argument_class.dataset)
+    baseG = datasets.load_dataset(argument_class.dataset, hypertuning)
 
     global trn_dataset, val_dataset, tst_dataset
     global max_deg, output_channels
@@ -367,7 +372,10 @@ def run_helper(argument_class, hypertuning=False):
     print(argument_class)
 
     # read configuration
-    with open(f"/media/nvme/poll/extended-GLASS/compl-config/{argument_class.dataset}.yml") as f:
+    path_to_config = f"compl-config/{argument_class.dataset}.yml"
+    if hypertuning:
+        path_to_config = os.path.join('/media/nvme/poll/extended-GLASS/', path_to_config)
+    with open(path_to_config) as f:
         params = yaml.safe_load(f)
     print("-" * 64)
 
@@ -375,7 +383,7 @@ def run_helper(argument_class, hypertuning=False):
     pprint(params)
     print("-" * 64)
 
-    split(argument_class)
+    split(argument_class, hypertuning)
     params.update({'args': argument_class,
                    'hypertuning': hypertuning})
     test(**(params))
