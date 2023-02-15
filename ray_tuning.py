@@ -1,5 +1,6 @@
 import argparse
 import json
+import math
 import os
 import time
 from pathlib import Path
@@ -29,16 +30,16 @@ class HyperParameterTuning:
     MAX_EPOCHS = 300
     CPUS_AVAIL = 20
     GPUS_AVAIL = 1
-    NUM_SAMPLES = 1
+    NUM_SAMPLES = int(math.pow(2, 5))
 
     seed = 42
 
     CONFIG = {
-        "m": tune.choice([1, 5, 10, 25, 50]),
-        "M": tune.choice([1, 5, 10, 25, 50]),
-        "samples": tune.choice([0.1, 0.25, 0.50, 0.75, 1.0]),
-        "stochastic": tune.choice([True, False]),
-        "diffusion": tune.choice([True, False]),
+        "m": tune.grid_search([1, 5, 10, 25, 50]),
+        "M": tune.grid_search([1, 5, 10, 25, 50]),
+        "samples": tune.grid_search([0.1, 0.25, 0.50, 0.75, 1.0]),
+        "stochastic": tune.grid_search([True, False]),
+        "diffusion": tune.grid_search([True, False]),
     }
 
 
