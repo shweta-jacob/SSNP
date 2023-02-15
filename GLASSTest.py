@@ -313,17 +313,20 @@ def test(pool1="size",
         json.dump(exp_results, output_file)
 
 
-def ray_tune_run_helper(config, argument_class):
+def ray_tune_run_helper(config, argument_class, device):
     argument_class.m = config['m']
     argument_class.M = config['M']
     argument_class.samples = config['samples']
     argument_class.stochastic = config['stochastic']
     argument_class.diffusion = config['diffusion']
+    argument_class.device = device
 
     run_helper(argument_class)
 
 
 def run_helper(argument_class):
+    config.set_device(argument_class.device)
+
     if argument_class.use_seed:
         set_seed(0)
         torch.backends.cudnn.deterministic = True
@@ -400,5 +403,4 @@ if __name__ == '__main__':
     parser.add_argument('--use_seed', action='store_true')
 
     args = parser.parse_args()
-    config.set_device(args.device)
     run_helper(args)

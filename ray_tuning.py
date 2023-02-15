@@ -27,8 +27,8 @@ class TimeStopper(Stopper):
 
 class HyperParameterTuning:
     MAX_EPOCHS = 300
-    CPUS_AVAIL = 80
-    GPUS_AVAIL = 4
+    CPUS_AVAIL = 20
+    GPUS_AVAIL = 1
     NUM_SAMPLES = 1
 
     seed = 42
@@ -72,7 +72,7 @@ def ray_tune_helper(identifier, output_path, dataset):
     seed_everything(42)
 
     result = tune.run(
-        tune.with_parameters(GLASSTest.ray_tune_run_helper, argument_class=base_args),
+        tune.with_parameters(GLASSTest.ray_tune_run_helper, argument_class=base_args, device=device),
         resources_per_trial={"cpu": hyper_class.CPUS_AVAIL, "gpu": hyper_class.GPUS_AVAIL},
         config=hyper_class.CONFIG,
         num_samples=hyper_class.NUM_SAMPLES,
