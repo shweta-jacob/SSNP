@@ -229,8 +229,6 @@ def test(pool1="size",
                                       val_loader,
                                       score_fn,
                                       loss_fn=loss_fn, device=config.device)
-                if hypertuning:
-                    tune.report(loss=loss, val_accuracy=score)
 
                 if score > val_score:
                     early_stop = 0
@@ -247,6 +245,8 @@ def test(pool1="size",
                         f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {val_score:.4f} tst {tst_score:.4f}",
                         flush=True)
                     print(f"Best picked so far- val: {val_score:.4f} tst: {tst_score:.4f}, early stop: {early_stop} \n")
+                    if hypertuning:
+                        tune.report(loss=loss, val_accuracy=val_score)
                 elif score >= val_score - 1e-5:
                     inf_start = time.time()
                     score, _ = train.test(gnn,
@@ -260,6 +260,8 @@ def test(pool1="size",
                         f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {val_score:.4f} tst {score:.4f}",
                         flush=True)
                     print(f"Best picked so far- val: {val_score:.4f} tst: {tst_score:.4f}, early stop: {early_stop} \n")
+                    if hypertuning:
+                        tune.report(loss=loss, val_accuracy=val_score)
                 else:
                     early_stop += 1
                     if i % 10 == 0:

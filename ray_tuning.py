@@ -16,7 +16,7 @@ import GLASSTest
 class TimeStopper(Stopper):
     def __init__(self):
         self._start = time.time()
-        self._deadline = 60 * 30  # 30 minutes max run across all experiments
+        self._deadline = 60 * 45  # 45 minutes max run across all experiments
 
     def __call__(self, trial_id, result):
         return False
@@ -47,7 +47,7 @@ class ComGraphArguments:
         self.model = 2
         self.use_nodeid = True
         self.repeat = 1
-        self.use_seed = True
+        self.use_seed = False
         self.dataset = dataset
         self.use_deg = False
         self.use_one = False
@@ -84,7 +84,7 @@ def ray_tune_helper(identifier, output_path, dataset):
         resume="AUTO",
         raise_on_failed_trial=False
     )
-    best_trial = result.get_best_trial("val_accuracy", "max", "last-10-avg")
+    best_trial = result.get_best_trial("val_accuracy", "max", "last")
 
     print("Best trial config: {}".format(best_trial))
     with open(f'{str(Path.home())}/{identifier}_best_result.json', "w") as file:
