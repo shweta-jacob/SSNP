@@ -9,6 +9,7 @@ import torch
 from ray import tune, init
 from ray.tune import CLIReporter, Stopper
 from ray.tune.schedulers import FIFOScheduler
+from ray.tune.utils.log import Verbosity
 
 import GLASSTest
 
@@ -62,7 +63,8 @@ def ray_tune_helper(identifier, output_path, dataset):
     scheduler = FIFOScheduler()
     scheduler.set_search_properties(metric='val_accuracy', mode='max')
 
-    reporter = CLIReporter(metric_columns=["loss", "val_accuracy", "training_iteration", "test_accuracy"])
+    reporter = CLIReporter(metric_columns=["loss", "val_accuracy", "training_iteration", "test_accuracy"],
+                           sort_by_metric="val_accuracy", max_progress_rows=80)
     base_args = ComGraphArguments(dataset)
 
     device = torch.device('cuda')
@@ -79,7 +81,8 @@ def ray_tune_helper(identifier, output_path, dataset):
         log_to_file=True,
         stop=TimeStopper(),
         resume="AUTO",
-        raise_on_failed_trial=False
+        raise_on_failed_trial=False,
+        verbose=Verbosity.V0_MINIMAL,
     )
     best_trial = result.get_best_trial("val_accuracy", "max", "last")
 
