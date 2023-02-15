@@ -159,7 +159,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
         config.device)
 
     print("-" * 64)
-    print("GNN Architecture is as follows")
+    print("GNN Architecture is as follows ->")
     print(gnn)
     print("-" * 64)
 
