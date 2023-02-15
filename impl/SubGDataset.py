@@ -6,6 +6,7 @@ from torch_geometric.data import Data
 import torch
 from torch.utils.data import DataLoader
 from torch_sparse import SparseTensor
+from tqdm import tqdm
 
 
 class GDataset:
@@ -34,6 +35,7 @@ class GDataset:
 
     def sample_pos_comp(self, samples, m, M, stoch, device):
         if not stoch:
+            print("Setting up non-stochastic data")
             N = self.x.shape[0]
             E = self.edge_index.size()[-1]
             sparse_adj = SparseTensor(
@@ -43,7 +45,7 @@ class GDataset:
             row, col, _ = sparse_adj.csr()
             batch_comp_nodes = []
             subgraph_nodes_list = []
-            for graph_nodes in self.pos:
+            for graph_nodes in tqdm(self.pos, ncols=70):
                 updated_graph_nodes = graph_nodes[graph_nodes != -1].tolist()
                 if samples:
                     updated_graph_node_list = updated_graph_nodes
