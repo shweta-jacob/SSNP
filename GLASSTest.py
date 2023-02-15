@@ -221,9 +221,9 @@ def test(pool1="size",
          dropout=0.3,
          jk=1,
          lr=1e-3,
-         z_ratio=0.8,
+         z_ratio=0,
          batch_size=None,
-         resi=0.7):
+         resi=0):
     '''
     Test a set of hyperparameters in a task.
     Args:
