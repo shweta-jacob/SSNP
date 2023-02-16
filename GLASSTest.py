@@ -203,7 +203,7 @@ def test(pool1="size",
     if args.dataset in ["density", "component", "cut_ratio", "coreness"]:
         num_div /= 5
 
-    print(f"Warmup  and early stop steps are set to 100/{num_div}  = {100 / num_div}")
+    print(f"Warmup and early stop steps are set to 100/{num_div}  = {100 / num_div}")
     print("-" * 64)
 
     outs = []
@@ -219,7 +219,7 @@ def test(pool1="size",
 
         tst_average = np.average(outs)
         tst_error = np.std(outs) / np.sqrt(len(outs))
-        print(f"Average so far for {repeat + 1} runs: {tst_average :.3f} ± {tst_error :.3f}")
+        print(f"Average so far for {repeat} runs: {tst_average :.3f} ± {tst_error :.3f}")
 
         start_pre = time.time()
         split(args, hypertuning)
