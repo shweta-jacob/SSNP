@@ -23,6 +23,7 @@ from impl.models import GLASSConv, MyGCNConv
 
 warnings.simplefilter('ignore', FutureWarning)
 warnings.simplefilter('ignore', UserWarning)
+warnings.simplefilter('ignore', RuntimeWarning)
 
 trn_dataset, val_dataset, tst_dataset = None, None, None
 max_deg, output_channels = 0, 1
