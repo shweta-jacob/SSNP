@@ -277,8 +277,8 @@ def test(pool="size",
                             flush=True)
             if val_score >= 1 - 1e-5:
                 early_stop += 1
-            # if early_stop > 100 / num_div:
-            #     break
+            if early_stop > 100 / num_div:
+                break
         end_time = time.time()
         run_time = end_time - start_time
         run_times.append(run_time)
