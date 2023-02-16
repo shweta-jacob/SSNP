@@ -200,6 +200,10 @@ def test(pool1="size",
     if args.dataset in ["density", "component", "cut_ratio", "coreness"]:
         num_div /= 5
 
+    print("-" * 64)
+    print(f"num_div is {num_div}")
+    print("-" * 64)
+    
     outs = []
     run_times = []
     trn_time = []
@@ -228,7 +232,7 @@ def test(pool1="size",
             trn_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn, device=config.device)
             trn_time.append(time.time() - t1)
 
-            if i >= 0:
+            if i >= 100 / num_div:
                 score, _ = train.test(gnn,
                                       val_loader,
                                       score_fn,
