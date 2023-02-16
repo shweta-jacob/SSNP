@@ -36,8 +36,8 @@ class SIGNNet(torch.nn.Module):
         # note; operator_diff MLP is just a linear layer that corresponds to a weight matrix, W
         self.operator_diff = MLP(mlp_layers, dropout=dropout, batch_norm=True, act_first=True, act='elu',
                                  plain_last=False)
-        self.link_pred_mlp = MLP([hidden_channels, hidden_channels, output_channels], dropout=dropout,
-                                 batch_norm=True, act_first=True, act='relu')
+        self.classification_mlp = MLP([hidden_channels, hidden_channels, output_channels], dropout=dropout,
+                                      batch_norm=True, act_first=True, act='relu')
 
     def _centre_pool_helper(self, batch, h):
         uq, center_indices = np.unique(batch.cpu().numpy(), return_index=True)
@@ -49,12 +49,12 @@ class SIGNNet(torch.nn.Module):
 
         x = self._centre_pool_helper(batch, x)
 
-        x = self.link_pred_mlp(x)
+        x = self.classification_mlp(x)
         return x
 
     def reset_parameters(self):
         self.operator_diff.reset_parameters()
-        self.link_pred_mlp.reset_parameters()
+        self.classification_mlp.reset_parameters()
 
 
 class GCN(torch.nn.Module):
