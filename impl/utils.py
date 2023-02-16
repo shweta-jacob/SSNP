@@ -204,7 +204,7 @@ def construct_pyg_graph(node_ids, adj, dists, node_features, y, node_label='drnl
 
 def extract_enclosing_subgraphs(pos, A, x, y, num_hops, node_label='zo',
                                 ratio_per_hop=1.0, max_nodes_per_hop=None,
-                                directed=False, A_csc=None, rw_kwargs=None):
+                                directed=False, A_csc=None, views=1, rw_kwargs=None):
     # Extract enclosing subgraphs from A for all links in link_index.
     data_list = []
 
@@ -215,13 +215,15 @@ def extract_enclosing_subgraphs(pos, A, x, y, num_hops, node_label='zo',
                                  directed=directed, A_csc=A_csc)
 
             data = construct_pyg_graph(*tmp, node_label)
+            data_list.append(data)
         else:
-            data = k_hop_subgraph(list(filter(lambda pos: pos != -1, center)), num_hops, A, ratio_per_hop,
-                                  max_nodes_per_hop, node_features=x, y=y[idx],
-                                  directed=directed, A_csc=A_csc, rw_kwargs=rw_kwargs)
+            for i in range(views):
+                data = k_hop_subgraph(list(filter(lambda pos: pos != -1, center)), num_hops, A, ratio_per_hop,
+                                      max_nodes_per_hop, node_features=x, y=y[idx],
+                                      directed=directed, A_csc=A_csc, rw_kwargs=rw_kwargs)
+            data_list.append(data)
         draw = False
         if draw:
             draw_graph(to_networkx(data))
-        data_list.append(data)
 
     return data_list
