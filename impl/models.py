@@ -408,6 +408,7 @@ class GLASS(nn.Module):
                     one_label = torch.ones(size=[len(list(subgraph_nodes)), ]).to(torch.long)
                     zero_label = torch.zeros(size=[len(list(complement_nodes)), ]).to(torch.long)
                     z = torch.cat([one_label, zero_label], dim=0)
+                    z = z.to(device)
                     z_emb = self.z_embedding(z)
                     emb_subg = emb[list(subgraph_nodes)]
                     emb_comp = emb[list(complement_nodes)]
@@ -427,7 +428,7 @@ class GLASS(nn.Module):
             use_zeroone = True
             if use_zeroone:
                 emb = torch.vstack(final_emb)
-                emb = pool[0](emb, torch.tensor(batch))
+                emb = pool[0](emb.to(device), torch.tensor(batch).to(device))
             else:
                 batch, pos = pad2batch(subG_node)
                 emb_subg = emb[pos]
