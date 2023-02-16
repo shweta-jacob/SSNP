@@ -143,11 +143,11 @@ def split():
     tst_list = extract_enclosing_subgraphs(
         tst_dataset.pos, A, tst_dataset.x, tst_dataset.y, 0, rw_kwargs=rw_kwargs)
     trn_loader = DataLoader(trn_list, batch_size=32,
-               shuffle=True)
+               shuffle=True, drop_last=True)
     val_loader = DataLoader(val_list, batch_size=32,
-               shuffle=True)
+               shuffle=True, drop_last=True)
     tst_loader = DataLoader(tst_list, batch_size=32,
-               shuffle=True)
+               shuffle=True, drop_last=True)
     # choice of dataloader
     if args.use_maxzeroone:
 
