@@ -343,9 +343,11 @@ class GLASS(nn.Module):
         self.m = m
         self.M = M
         self.stochastic = stochastic
+        self.max_z = 1000
+        self.z_embedding = nn.Embedding(self.max_z, hidden_dim)
         self.diffusion = diffusion
         if self.diffusion and self.model_type == 2:
-            self.mlp = torch_geometric.nn.MLP(channel_list=[hidden_dim * conv_layer * 2, hidden_dim * 2, hidden_dim],
+            self.mlp = torch_geometric.nn.MLP(channel_list=[hidden_dim * (conv_layer + 1), hidden_dim * 2, hidden_dim],
                                           act_first=True, act="ELU", dropout=[0.5, 0.5])
 
     def NodeEmb(self, x, edge_index, edge_weight):
@@ -377,10 +379,12 @@ class GLASS(nn.Module):
             # row = torch.tensor(list(map(lambda x: x[0], G.edges())))
             # col = torch.tensor(list(map(lambda x: x[1], G.edges())))
             # row, col = edge_index[0].to(device), edge_index[1].to(device)
+            final_emb = []
+            batch = []
             if self.stochastic:
                 batch_comp_nodes = []
                 subgraph_nodes_list = []
-                for graph_nodes in subG_node:
+                for idx, graph_nodes in enumerate(subG_node):
                     updated_graph_nodes = graph_nodes[graph_nodes != -1].tolist()
                     if self.samples:
                         updated_graph_node_list = updated_graph_nodes
@@ -401,23 +405,40 @@ class GLASS(nn.Module):
                     batch_comp_nodes.append(torch.Tensor(list(complement_nodes)))
                     subgraph_nodes_list.append(torch.Tensor(list(subgraph_nodes)))
 
-                complement = pad_sequence(batch_comp_nodes, batch_first=True, padding_value=-1).to(torch.int64)
-                complement = complement.to(device)
-                comp_node = complement
+                    one_label = torch.ones(size=[len(list(subgraph_nodes)), ]).to(torch.long)
+                    zero_label = torch.zeros(size=[len(list(complement_nodes)), ]).to(torch.long)
+                    z = torch.cat([one_label, zero_label], dim=0)
+                    z_emb = self.z_embedding(z)
+                    emb_subg = emb[list(subgraph_nodes)]
+                    emb_comp = emb[list(complement_nodes)]
+                    emb_c = torch.cat([emb_subg, emb_comp], dim=0)
+                    emb_c = torch.cat([emb_c, z_emb], dim=-1)
+                    final_emb.append(emb_c)
+                    batch.extend([idx] * emb_c.shape[0])
 
-                subgraph = pad_sequence(subgraph_nodes_list, batch_first=True, padding_value=-1).to(torch.int64)
-                subgraph = subgraph.to(device)
-                subG_node = subgraph
+                # complement = pad_sequence(batch_comp_nodes, batch_first=True, padding_value=-1).to(torch.int64)
+                # complement = complement.to(device)
+                # comp_node = complement
+                #
+                # subgraph = pad_sequence(subgraph_nodes_list, batch_first=True, padding_value=-1).to(torch.int64)
+                # subgraph = subgraph.to(device)
+                # subG_node = subgraph
 
-            batch, pos = pad2batch(subG_node)
-            emb_subg = emb[pos]
-            emb_subg = pool[0](emb_subg, batch)
+            use_zeroone = True
+            if use_zeroone:
+                emb = torch.vstack(final_emb)
+                emb = pool[0](emb, torch.tensor(batch))
+            else:
+                batch, pos = pad2batch(subG_node)
+                emb_subg = emb[pos]
+                emb_subg = pool[0](emb_subg, batch)
 
-            batch_comp, pos_comp = pad2batch(comp_node)
-            emb_comp = emb[pos_comp]
-            emb_comp = pool[1](emb_comp, batch_comp)
+                batch_comp, pos_comp = pad2batch(comp_node)
+                emb_comp = emb[pos_comp]
+                emb_comp = pool[1](emb_comp, batch_comp)
 
-            emb = torch.cat([emb_subg, emb_comp], dim=-1)
+                emb = torch.cat([emb_subg, emb_comp], dim=-1)
+
             if self.diffusion:
                 emb = self.mlp(emb)
 
