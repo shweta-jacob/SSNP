@@ -40,6 +40,7 @@ parser.add_argument('--m', type=int, default=1)
 parser.add_argument('--M', type=int, default=5)
 parser.add_argument('--samples', type=float, default=0)
 parser.add_argument('--num_powers', type=int, default=1)
+parser.add_argument('--views', type=int, default=1)
 
 parser.add_argument('--repeat', type=int, default=1)
 parser.add_argument('--device', type=int, default=0)
@@ -146,7 +147,7 @@ def split():
         shape=(trn_dataset.x.shape[0], trn_dataset.x.shape[0])
     )
     trn_list = extract_enclosing_subgraphs(
-        trn_dataset.pos, A, trn_dataset.x, trn_dataset.y, args.num_hops, args.num_powers, rw_kwargs=rw_kwargs, edge_index=trn_dataset.edge_index)
+        trn_dataset.pos, A, trn_dataset.x, trn_dataset.y, args.num_hops, args.num_powers, views=args.views, rw_kwargs=rw_kwargs, edge_index=trn_dataset.edge_index)
     val_list = extract_enclosing_subgraphs(
         val_dataset.pos, A, val_dataset.x, val_dataset.y, args.num_hops, args.num_powers, rw_kwargs=rw_kwargs, edge_index=val_dataset.edge_index)
     tst_list = extract_enclosing_subgraphs(
