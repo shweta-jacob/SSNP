@@ -38,6 +38,7 @@ parser.add_argument('--samples', type=float, default=0)
 parser.add_argument('--m', type=int, default=0)
 parser.add_argument('--M', type=int, default=0)
 parser.add_argument('--views', type=int, default=1)
+parser.add_argument('--pool', type=str, default='sort')
 
 parser.add_argument('--repeat', type=int, default=1)
 parser.add_argument('--device', type=int, default=0)
@@ -205,7 +206,10 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         raise NotImplementedError
 
     max_z = 1000
-    gnn = DGCNN(hidden_dim, output_channels, conv_layer, max_z, node_embedding=emb, dropedge=0, synthetic=synthetic).to(config.device)
+    if args.pool != "sort":
+        gnn = GCN(hidden_dim, output_channels, conv_layer, max_z, node_embedding=emb, dropedge=0, synthetic=synthetic, pool=pool_fn_fn[args.pool]()).to(config.device)
+    else:
+        gnn = DGCNN(hidden_dim, output_channels, conv_layer, max_z, node_embedding=emb, dropedge=0, synthetic=synthetic).to(config.device)
     parameters = list(gnn.parameters())
     total_params = sum(p.numel() for param in parameters for p in param)
     print(f'Total number of parameters is {total_params}')
@@ -335,7 +339,7 @@ def test(pool1="size",
             "Avg inference time": f"{np.average(inference_time):.2f} with std {np.std(inference_time):.2f}",
         },
     }
-    with open(f"{args.dataset}_views_{args.views}_samples_{args.samples}_m_{args.m}_M_{args.M}_results.json", 'w') as output_file:
+    with open(f"{args.dataset}_pool_{args.pool}_views_{args.views}_samples_{args.samples}_m_{args.m}_M_{args.M}_results.json", 'w') as output_file:
         json.dump(exp_results, output_file)
 
 

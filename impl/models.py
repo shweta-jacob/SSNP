@@ -13,7 +13,7 @@ from .utils import pad2batch
 
 
 class GCN(torch.nn.Module):
-    def __init__(self, hidden_channels, output_channels, num_layers, max_z, node_embedding=None, dropout=0.75, dropedge=0.0, synthetic=False):
+    def __init__(self, hidden_channels, output_channels, num_layers, max_z, pool, node_embedding=None, dropout=0.75, dropedge=0.0, synthetic=False):
         super(GCN, self).__init__()
 
         self.node_embedding = node_embedding
@@ -30,6 +30,7 @@ class GCN(torch.nn.Module):
         self.dropedge = dropedge
         self.mlp = MLP([hidden_channels, hidden_channels, output_channels], dropout=dropout, norm=None)
         self.synthetic = synthetic
+        self.pool = pool
 
     def reset_parameters(self):
         for conv in self.convs:
@@ -52,11 +53,7 @@ class GCN(torch.nn.Module):
             x = F.dropout(x, p=self.dropout, training=self.training)
         x = self.convs[-1](x, edge_index)
 
-        # mean pool
-        x = global_mean_pool(x, batch)
-
-        # max pool
-        # x = global_max_pool(x, batch)
+        x = self.pool(x, batch)
 
         x = self.mlp(x)
         return x
