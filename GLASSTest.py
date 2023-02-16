@@ -1,6 +1,7 @@
 import argparse
 import functools
 import json
+import os.path
 import random
 import time
 from pprint import pprint
@@ -9,6 +10,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import yaml
+from ray import tune
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 from torch.optim import Adam
 from torch_geometric.nn import MLP, GCNConv
@@ -20,31 +22,10 @@ import warnings
 warnings.simplefilter('ignore', FutureWarning)
 warnings.simplefilter('ignore', UserWarning)
 
-parser = argparse.ArgumentParser(description='')
-# Dataset settings
-parser.add_argument('--dataset', type=str, default='ppi_bp')
-# Node feature settings. 
-# deg means use node degree. one means use homogeneous embeddings.
-# nodeid means use pretrained node embeddings in ./Emb
-parser.add_argument('--use_deg', action='store_true')
-parser.add_argument('--use_one', action='store_true')
-parser.add_argument('--use_nodeid', action='store_true')
-# model 0 means use subgraph emb. model 1 means use complement emb. model 3 means use both subgraph and complement.
-parser.add_argument('--model', type=int, default=0)
-# node label settings
-parser.add_argument('--use_maxzeroone', action='store_true')
-parser.add_argument('--samples', type=float, default=0)
-parser.add_argument('--m', type=int, default=0)
-parser.add_argument('--M', type=int, default=0)
-parser.add_argument('--diffusion', action='store_true')
-parser.add_argument('--stochastic', action='store_true')
-
-parser.add_argument('--repeat', type=int, default=1)
-parser.add_argument('--device', type=int, default=0)
-parser.add_argument('--use_seed', action='store_true')
-
-args = parser.parse_args()
-config.set_device(args.device)
+trn_dataset, val_dataset, tst_dataset = None, None, None
+max_deg, output_channels = 0, 1
+score_fn = None
+loss_fn = None
 
 
 def set_seed(seed: int):
@@ -56,49 +37,14 @@ def set_seed(seed: int):
     torch.cuda.manual_seed_all(seed)  # multi gpu
 
 
-if args.use_seed:
-    set_seed(0)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.enabled = False
-
-baseG = datasets.load_dataset(args.dataset)
-
-trn_dataset, val_dataset, tst_dataset = None, None, None
-max_deg, output_channels = 0, 1
-score_fn = None
-
-if baseG.y.unique().shape[0] == 2:
-    # binary classification task
-    def loss_fn(x, y):
-        return BCEWithLogitsLoss()(x.flatten(), y.flatten())
-
-
-    baseG.y = baseG.y.to(torch.float)
-    if baseG.y.ndim > 1:
-        output_channels = baseG.y.shape[1]
-    else:
-        output_channels = 1
-    score_fn = metrics.binaryf1
-else:
-    # multi-class classification task
-    baseG.y = baseG.y.to(torch.int64)
-    loss_fn = CrossEntropyLoss()
-    output_channels = baseG.y.unique().shape[0]
-    score_fn = metrics.microf1
-
-loader_fn = SubGDataset.GDataloader
-tloader_fn = SubGDataset.GDataloader
-
-
-def split():
+def split(args, hypertuning=False):
     '''
     load and split dataset.
     '''
     # initialize and split dataset
     global trn_dataset, val_dataset, tst_dataset, baseG
     global max_deg, output_channels, loader_fn, tloader_fn
-    baseG = datasets.load_dataset(args.dataset)
+    baseG = datasets.load_dataset(args.dataset, hypertuning)
     if baseG.y.unique().shape[0] == 2:
         baseG.y = baseG.y.to(torch.float)
     else:
@@ -150,7 +96,7 @@ def split():
             return SubGDataset.GDataloader(ds, bs, shuffle=True)
 
 
-def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr):
+def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr, args=None, hypertuning=False):
     '''
     Build a GLASS model.
     Args:
@@ -173,8 +119,10 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
     # use pretrained node embeddings.
     if args.use_nodeid:
         print("load ", f"./Emb/{args.dataset}_{hidden_dim}.pt")
-        emb = torch.load(f"./Emb/{args.dataset}_{hidden_dim}.pt",
-                         map_location=torch.device('cpu')).detach()
+        path_to_emb = f"Emb/{args.dataset}_{hidden_dim}.pt"
+        if hypertuning:
+            path_to_emb = os.path.join('/media/nvme/poll/extended-GLASS/', path_to_emb)
+        emb = torch.load(path_to_emb, map_location=torch.device('cpu')).detach()
         conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
 
     num_rep = 1
@@ -211,7 +159,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
         config.device)
 
     print("-" * 64)
-    print("GNN Architecture is as follows")
+    print("GNN Architecture is as follows ->")
     print(gnn)
     print("-" * 64)
 
@@ -234,7 +182,9 @@ def test(pool1="size",
          lr=1e-3,
          z_ratio=0,
          batch_size=None,
-         resi=0):
+         resi=0,
+         hypertuning=False,
+         args=None):
     '''
     Test a set of hyperparameters in a task.
     Args:
@@ -257,12 +207,13 @@ def test(pool1="size",
     preproc_times = []
     for repeat in range(args.repeat):
         start_time = time.time()
-        set_seed(repeat + 1)
+        if not hypertuning:
+            set_seed(repeat + 1)
         print(f"repeat {repeat}")
         start_pre = time.time()
-        split()
+        split(args, hypertuning)
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio,
-                         aggr)
+                         aggr, args, hypertuning)
         trn_loader = loader_fn(trn_dataset, batch_size)
         val_loader = tloader_fn(val_dataset, batch_size)
         tst_loader = tloader_fn(tst_dataset, batch_size)
@@ -298,6 +249,8 @@ def test(pool1="size",
                         f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {val_score:.4f} tst {tst_score:.4f}",
                         flush=True)
                     print(f"Best picked so far- val: {val_score:.4f} tst: {tst_score:.4f}, early stop: {early_stop} \n")
+                    if hypertuning:
+                        tune.report(loss=loss, val_accuracy=val_score, test_accuracy=tst_score)
                 elif score >= val_score - 1e-5:
                     inf_start = time.time()
                     score, _ = train.test(gnn,
@@ -311,6 +264,8 @@ def test(pool1="size",
                         f"iter {i} loss {loss:.4f} train {trn_score:.4f} val {val_score:.4f} tst {score:.4f}",
                         flush=True)
                     print(f"Best picked so far- val: {val_score:.4f} tst: {tst_score:.4f}, early stop: {early_stop} \n")
+                    if hypertuning:
+                        tune.report(loss=loss, val_accuracy=val_score, test_accuracy=tst_score)
                 else:
                     early_stop += 1
                     if i % 10 == 0:
@@ -325,8 +280,9 @@ def test(pool1="size",
                             f"Best picked so far- val: {val_score:.4f} tst: {tst_score:.4f}, early stop: {early_stop} \n")
             if val_score >= 1 - 1e-5:
                 early_stop += 1
-            # if early_stop > 100 / num_div:
-            #     break
+            if early_stop >= 50:
+                print("Patience exhausted. Early stopping.")
+                break
         end_time = time.time()
         run_time = end_time - start_time
         run_times.append(run_time)
@@ -364,18 +320,98 @@ def test(pool1="size",
         json.dump(exp_results, output_file)
 
 
-print("-" * 64)
-print("User input args", "->")
-print(args)
+def ray_tune_run_helper(config, argument_class, device):
+    argument_class.m = config['m']
+    argument_class.M = config['M']
+    argument_class.samples = config['samples']
+    argument_class.diffusion = config['diffusion']
+    argument_class.device = device
 
-# read configuration
-with open(f"compl-config/{args.dataset}.yml") as f:
-    params = yaml.safe_load(f)
-print("-" * 64)
+    run_helper(argument_class, hypertuning=True)
 
-print("Loaded YAML", "->" )
-pprint(params)
-print("-" * 64)
 
-split()
-test(**(params))
+def run_helper(argument_class, hypertuning=False):
+    config.set_device(argument_class.device)
+
+    if argument_class.use_seed:
+        if not hypertuning:
+            set_seed(0)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.enabled = False
+
+    baseG = datasets.load_dataset(argument_class.dataset, hypertuning)
+
+    global trn_dataset, val_dataset, tst_dataset
+    global max_deg, output_channels
+    global score_fn, loss_fn
+
+    if baseG.y.unique().shape[0] == 2:
+        # binary classification task
+        def loss_fn(x, y):
+            return BCEWithLogitsLoss()(x.flatten(), y.flatten())
+
+        baseG.y = baseG.y.to(torch.float)
+        if baseG.y.ndim > 1:
+            output_channels = baseG.y.shape[1]
+        else:
+            output_channels = 1
+        score_fn = metrics.binaryf1
+    else:
+        # multi-class classification task
+        baseG.y = baseG.y.to(torch.int64)
+        loss_fn = CrossEntropyLoss()
+        output_channels = baseG.y.unique().shape[0]
+        score_fn = metrics.microf1
+
+    loader_fn = SubGDataset.GDataloader
+    tloader_fn = SubGDataset.GDataloader
+
+    print("-" * 64)
+    print("User input args", "->")
+    print(argument_class)
+
+    # read configuration
+    path_to_config = f"compl-config/{argument_class.dataset}.yml"
+    if hypertuning:
+        path_to_config = os.path.join('/media/nvme/poll/extended-GLASS/', path_to_config)
+    with open(path_to_config) as f:
+        params = yaml.safe_load(f)
+    print("-" * 64)
+
+    print("Loaded YAML", "->")
+    pprint(params)
+    print("-" * 64)
+
+    split(argument_class, hypertuning)
+    params.update({'args': argument_class,
+                   'hypertuning': hypertuning})
+    test(**(params))
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='')
+    # Dataset settings
+    parser.add_argument('--dataset', type=str, default='ppi_bp')
+    # Node feature settings.
+    # deg means use node degree. one means use homogeneous embeddings.
+    # nodeid means use pretrained node embeddings in ./Emb
+    parser.add_argument('--use_deg', action='store_true')
+    parser.add_argument('--use_one', action='store_true')
+    parser.add_argument('--use_nodeid', action='store_true')
+    # model 0 means use subgraph emb. model 1 means use complement emb. model 3 means use both subgraph and complement.
+    parser.add_argument('--model', type=int, default=0)
+    # node label settings
+    parser.add_argument('--use_maxzeroone', action='store_true')
+    parser.add_argument('--samples', type=float, default=0)
+    parser.add_argument('--m', type=int, default=0)
+    parser.add_argument('--M', type=int, default=0)
+    parser.add_argument('--diffusion', action='store_true')
+    parser.add_argument('--stochastic', action='store_true')
+
+    parser.add_argument('--repeat', type=int, default=1)
+    parser.add_argument('--device', type=int, default=0)
+    parser.add_argument('--use_seed', action='store_true')
+
+    args = parser.parse_args()
+    run_helper(args)
