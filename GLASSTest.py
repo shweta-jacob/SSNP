@@ -203,7 +203,7 @@ def test(pool1="size",
     if args.dataset in ["density", "component", "cut_ratio", "coreness"]:
         num_div /= 5
 
-    print(f"Warmup is 100/{num_div}  = {100 / num_div}")
+    print(f"Warmup  and early stop steps are set to 100/{num_div}  = {100 / num_div}")
     print("-" * 64)
 
     outs = []
