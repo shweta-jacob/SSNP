@@ -254,14 +254,20 @@ class EmbZGConv(nn.Module):
         xs = []
         x = F.dropout(x, p=self.dropout, training=self.training)
         # pass messages at each layer.
+        if z is None:
+            mask = (torch.zeros(
+                (x.shape[0]), device=x.device) < 0.5).reshape(-1, 1)
+        else:
+            mask = (z > 0.5).reshape(-1, 1)
+
         for layer, conv in enumerate(self.convs[:-1]):
-            x = conv(x, edge_index, edge_weight)
+            x = conv(x, edge_index, edge_weight, mask)
             xs.append(x)
             if not (self.gns is None):
                 x = self.gns[layer](x)
             x = self.activation(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
-        x = self.convs[-1](x, edge_index, edge_weight)
+        x = self.convs[-1](x, edge_index, edge_weight, mask)
         xs.append(x)
 
         if self.jk:
