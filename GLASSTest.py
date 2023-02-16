@@ -200,10 +200,9 @@ def test(pool1="size",
     if args.dataset in ["density", "component", "cut_ratio", "coreness"]:
         num_div /= 5
 
+    print(f"Warmup is 100/{num_div}  = {100 / num_div}")
     print("-" * 64)
-    print(f"num_div is {num_div}")
-    print("-" * 64)
-    
+
     outs = []
     run_times = []
     trn_time = []
