@@ -31,7 +31,7 @@ loss_fn = None
 
 
 def set_seed(seed: int):
-    print("seed ", seed)
+    print("seed = ", seed)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -214,7 +214,12 @@ def test(pool1="size",
         start_time = time.time()
         if not hypertuning:
             set_seed(repeat + 1)
-        print(f"repeat {repeat}")
+        print(f"repeat = {repeat}")
+
+        tst_average = np.average(outs)
+        tst_error = np.std(outs) / np.sqrt(len(outs))
+        print(f"Average so far for {repeat + 1} runs: {tst_average :.3f} ± {tst_error :.3f}")
+
         start_pre = time.time()
         split(args, hypertuning)
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio,
@@ -303,14 +308,14 @@ def test(pool1="size",
             flush=True)
         outs.append(tst_score * 100)
     print(f"Time for {args.dataset} dataset and model {args.model}")
-    print(f"Average run time: {np.average(run_times):.3f} with std {np.std(run_times):.3f}")
-    print(f"Average preprocessing time: {np.average(preproc_times):.3f} with std {np.std(preproc_times):.3f}")
-    print(f"Average train time: {np.average(trn_time):.3f} with std {np.std(trn_time):.3f}")
-    print(f"Average inference time: {np.average(inference_time):.3f} with std {np.std(inference_time):.3f}")
+    print(f"Average run time: {np.average(run_times):.3f} ± {np.std(run_times):.3f}")
+    print(f"Average preprocessing time: {np.average(preproc_times):.3f} ± {np.std(preproc_times):.3f}")
+    print(f"Average train time: {np.average(trn_time):.3f} ± {np.std(trn_time):.3f}")
+    print(f"Average inference time: {np.average(inference_time):.3f} ± {np.std(inference_time):.3f}")
     tst_average = np.average(outs)
     tst_error = np.std(outs) / np.sqrt(len(outs))
     print(
-        f"average {tst_average :.3f} error {tst_error :.3f}"
+        f"average {tst_average :.3f} ± {tst_error :.3f}"
     )
     exp_results = {}
     exp_results[f"{args.dataset}_model{args.model}"] = {
