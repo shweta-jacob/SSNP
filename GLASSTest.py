@@ -19,6 +19,8 @@ import datasets
 from impl import models, SubGDataset, train, metrics, utils, config
 import warnings
 
+from impl.models import GLASSConv, MyGCNConv
+
 warnings.simplefilter('ignore', FutureWarning)
 warnings.simplefilter('ignore', UserWarning)
 
@@ -113,7 +115,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
                             activation=nn.ELU(inplace=True),
                             jk=jk,
                             dropout=dropout,
-                            conv=functools.partial(GCNConv),
+                            conv=functools.partial(MyGCNConv, aggr=aggr),
                             gn=True)
 
     # use pretrained node embeddings.
