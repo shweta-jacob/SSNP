@@ -5,3 +5,4 @@ hidden_dim: 64
 lr: 0.001
 pool1: size
 pool2: size
+resi: 0.7

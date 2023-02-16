@@ -5,3 +5,4 @@ hidden_dim: 64
 lr: 0.002
 pool1: sum
 pool2: sum
+resi: 0.2
