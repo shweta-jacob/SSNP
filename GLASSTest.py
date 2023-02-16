@@ -68,7 +68,7 @@ def split(args, hypertuning=False):
     trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
     tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
-    trn_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device)
+    trn_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, views=args.views, device=config.device)
     val_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device)
     tst_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device)
 
@@ -425,6 +425,7 @@ if __name__ == '__main__':
     parser.add_argument('--M', type=int, default=0)
     parser.add_argument('--diffusion', action='store_true')
     parser.add_argument('--stochastic', action='store_true')
+    parser.add_argument('--views', type=int, default=1)
 
     parser.add_argument('--repeat', type=int, default=1)
     parser.add_argument('--device', type=int, default=0)
