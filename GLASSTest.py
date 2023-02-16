@@ -343,7 +343,7 @@ def test(pool1="size",
             "Avg inference time": f"{np.average(inference_time):.2f} with std {np.std(inference_time):.2f}",
         },
     }
-    with open(f"{args.dataset}_samples_{args.samples}_m_{args.m}_M_{args.M}_results.json", 'w') as output_file:
+    with open(f"{args.dataset}_powers_{args.powers}_views_{args.views}_samples_{args.samples}_m_{args.m}_M_{args.M}_results.json", 'w') as output_file:
         json.dump(exp_results, output_file)
 
 
