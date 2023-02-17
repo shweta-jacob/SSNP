@@ -116,8 +116,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
                             jk=jk,
                             dropout=dropout,
                             conv=functools.partial(GINConv, nn=nn.Sequential(
-                                Linear(hidden_dim, hidden_dim), nn.ELU(),
-                                Linear(hidden_dim, hidden_dim), nn.ELU(),
+                                Linear(hidden_dim, hidden_dim), nn.ELU(), nn.Dropout(0.5),
                                 Linear(hidden_dim, hidden_dim))))
 
     # use pretrained node embeddings.
