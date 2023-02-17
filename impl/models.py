@@ -183,6 +183,46 @@ class GLASSConv(torch.nn.Module):
         return x
 
 
+class COMGraphConv(torch.nn.Module):
+    '''
+    Based off GLASSConv, but no mixing and simple 2 linear layers with norm and dropout in between.
+    '''
+
+    def __init__(self,
+                 in_channels: int,
+                 out_channels: int,
+                 activation=nn.ELU(inplace=True),
+                 aggr="mean",
+                 dropout=0.2):
+        super().__init__()
+        self.linear1 = torch_geometric.nn.dense.linear.Linear(in_channels, out_channels, weight_initializer='glorot')
+        self.linear2 = torch_geometric.nn.dense.linear.Linear(in_channels + out_channels, out_channels,
+                                                              weight_initializer='glorot')
+        self.adj = torch.sparse_coo_tensor(size=(0, 0))
+        self.activation = activation
+        self.aggr = aggr
+        self.gn = GraphNorm(out_channels)
+        self.reset_parameters()
+        self.dropout = dropout
+
+    def reset_parameters(self):
+        self.linear1.reset_parameters()
+        self.linear2.reset_parameters()
+        self.gn.reset_parameters()
+
+    def forward(self, x_, edge_index, edge_weight):
+        if self.adj.shape[0] == 0:
+            n_node = x_.shape[0]
+            self.adj = buildAdj(edge_index, edge_weight, n_node, self.aggr)
+        x = self.activation(self.linear1(x_))
+        x = self.adj @ x
+        x = self.gn(x)
+        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = torch.cat((x, x_), dim=-1)
+        x = self.linear2(x)
+        return x
+
+
 class EmbZGConv(nn.Module):
     '''
     combination of some GLASSConv layers, normalization layers, dropout layers, and activation function.
@@ -261,13 +301,13 @@ class EmbZGConv(nn.Module):
             mask = (z > 0.5).reshape(-1, 1)
 
         for layer, conv in enumerate(self.convs[:-1]):
-            x = conv(x, edge_index, edge_weight, mask)
+            x = conv(x, edge_index, edge_weight)
             xs.append(x)
             if not (self.gns is None):
                 x = self.gns[layer](x)
             x = self.activation(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
-        x = self.convs[-1](x, edge_index, edge_weight, mask)
+        x = self.convs[-1](x, edge_index, edge_weight)
         xs.append(x)
 
         if self.jk:
@@ -352,7 +392,7 @@ class GLASS(nn.Module):
         self.diffusion = diffusion
         if self.diffusion and self.model_type == 2:
             self.mlp = torch_geometric.nn.MLP(channel_list=[hidden_dim * conv_layer * 2, hidden_dim * 2, hidden_dim],
-                                          act_first=True, act="ELU", dropout=[0.5, 0.5])
+                                              act_first=True, act="ELU", dropout=[0.5, 0.5])
 
     def NodeEmb(self, x, edge_index, edge_weight):
         embs = []
