@@ -6,3 +6,4 @@ lr: 0.001
 pool1: size
 pool2: size
 resi: 0.7
+z_ratio: 0 

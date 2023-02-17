@@ -116,7 +116,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
                             activation=nn.ELU(inplace=True),
                             jk=jk,
                             dropout=dropout,
-                            conv=functools.partial(GLASSConv, aggr=aggr),
+                            conv=functools.partial(GLASSConv, aggr=aggr, dropout=dropout, z_ratio=z_ratio),
                             gn=True)
 
     # use pretrained node embeddings.
