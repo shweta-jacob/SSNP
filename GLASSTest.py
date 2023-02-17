@@ -13,13 +13,11 @@ import yaml
 from ray import tune
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 from torch.optim import Adam, lr_scheduler
-from torch_geometric.nn import MLP, GCNConv
+from torch_geometric.nn import MLP, GINConv, Linear
 
 import datasets
 from impl import models, SubGDataset, train, metrics, utils, config
 import warnings
-
-from impl.models import GLASSConv, MyGCNConv
 
 warnings.simplefilter('ignore', FutureWarning)
 warnings.simplefilter('ignore', UserWarning)
@@ -68,7 +66,8 @@ def split(args, hypertuning=False):
     trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
     tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
-    trn_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, views=args.views, device=config.device)
+    trn_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, views=args.views,
+                                device=config.device)
     val_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device)
     tst_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device)
 
@@ -116,8 +115,10 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
                             activation=nn.ELU(inplace=True),
                             jk=jk,
                             dropout=dropout,
-                            conv=functools.partial(GCNConv),
-                            gn=True)
+                            conv=functools.partial(GINConv, nn=nn.Sequential(
+                                Linear(hidden_dim, hidden_dim), nn.ELU(),
+                                Linear(hidden_dim, hidden_dim), nn.ELU(),
+                                Linear(hidden_dim, hidden_dim))))
 
     # use pretrained node embeddings.
     if args.use_nodeid:
