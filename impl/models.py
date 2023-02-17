@@ -14,7 +14,7 @@ from .utils import pad2batch
 
 
 class SIGNNet(torch.nn.Module):
-    def __init__(self, hidden_channels, num_layers, powers, train_dataset, use_feature=False, node_embedding=None, dropout=0.5,
+    def __init__(self, hidden_channels, num_layers, powers, train_dataset, pool, use_feature=False, node_embedding=None, dropout=0.5,
                  pool_operatorwise=False, k_heuristic=0, k_pool_strategy="", output_channels=None):
         super().__init__()
 
@@ -38,10 +38,10 @@ class SIGNNet(torch.nn.Module):
                                  plain_last=False)
         self.classification_mlp = MLP([hidden_channels, hidden_channels, output_channels], dropout=dropout,
                                       batch_norm=True, act_first=True, act='relu')
+        self.pool = pool
 
     def _centre_pool_helper(self, batch, h):
-        uq, center_indices = np.unique(batch.cpu().numpy(), return_index=True)
-        h = global_mean_pool(h, batch, size=uq.shape[0])
+        h = self.pool(h, batch)
         return h
 
     def forward(self, x, batch):

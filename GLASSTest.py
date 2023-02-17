@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 import yaml
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
-from torch.optim import Adam
+from torch.optim import Adam, lr_scheduler
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import MLP
 from torch_sparse import SparseTensor
@@ -41,6 +41,7 @@ parser.add_argument('--M', type=int, default=5)
 parser.add_argument('--samples', type=float, default=0)
 parser.add_argument('--num_powers', type=int, default=1)
 parser.add_argument('--views', type=int, default=1)
+parser.add_argument('--pool', type=str, default="mean")
 
 parser.add_argument('--repeat', type=int, default=1)
 parser.add_argument('--device', type=int, default=0)
@@ -152,9 +153,9 @@ def split():
         val_dataset.pos, A, val_dataset.x, val_dataset.y, args.num_hops, args.num_powers, rw_kwargs=rw_kwargs, edge_index=val_dataset.edge_index)
     tst_list = extract_enclosing_subgraphs(
         tst_dataset.pos, A, tst_dataset.x, tst_dataset.y, args.num_hops, args.num_powers, rw_kwargs=rw_kwargs, edge_index=tst_dataset.edge_index)
-    trn_loader = DataLoader(trn_list, batch_size=32, num_workers=32, shuffle=True, drop_last=True)
-    val_loader = DataLoader(val_list, batch_size=32, num_workers=32, shuffle=True, drop_last=True)
-    tst_loader = DataLoader(tst_list, batch_size=32, num_workers=32, shuffle=True, drop_last=True)
+    trn_loader = DataLoader(trn_list, batch_size=32, num_workers=0, shuffle=True, drop_last=True)
+    val_loader = DataLoader(val_list, batch_size=32, num_workers=0, shuffle=True, drop_last=True)
+    tst_loader = DataLoader(tst_list, batch_size=32, num_workers=0, shuffle=True, drop_last=True)
     # choice of dataloader
     if args.use_maxzeroone:
 
@@ -211,9 +212,8 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr)
     else:
         raise NotImplementedError
 
-    max_z = 1000
     gnn = SIGNNet(hidden_channels=hidden_dim, num_layers=conv_layer, powers=args.num_powers, train_dataset=trn_dataset,
-                  output_channels=output_channels).to(config.device)
+                  pool=pool_fn_fn[args.pool](), output_channels=output_channels).to(config.device)
     parameters = list(gnn.parameters())
     total_params = sum(p.numel() for param in parameters for p in param)
     print(f'Total number of parameters is {total_params}')
@@ -252,6 +252,10 @@ def test(pool1="size",
         print(f"repeat {repeat}")
         start_pre = time.time()
         split()
+        num_div = tst_dataset.y.shape[0] / batch_size
+        # we use num_div to calculate the number of iteration per epoch and count the number of iteration.
+        if args.dataset in ["density", "component", "cut_ratio", "coreness"]:
+            num_div /= 5
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio,
                          aggr)
         # trn_loader = loader_fn(trn_dataset, batch_size)
@@ -260,6 +264,9 @@ def test(pool1="size",
         end_pre = time.time()
         preproc_times.append(end_pre - start_pre)
         optimizer = Adam(gnn.parameters(), lr=lr)
+        scd = lr_scheduler.ReduceLROnPlateau(optimizer,
+                                             factor=resi,
+                                             min_lr=5e-5)
         val_score = 0
         tst_score = 0
         early_stop = 0
@@ -267,8 +274,9 @@ def test(pool1="size",
             t1 = time.time()
             trn_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn, device=config.device)
             trn_time.append(time.time() - t1)
+            scd.step(loss)
 
-            if i >= 0:
+            if i >= 50:
                 score, _ = train.test(gnn,
                                       val_loader,
                                       score_fn,
@@ -315,6 +323,8 @@ def test(pool1="size",
                         print(f"Best so far- val {val_score:.4f} tst {tst_score:.4f}")
             if val_score >= 1 - 1e-5:
                 early_stop += 1
+            if early_stop > 30:
+                break
         end_time = time.time()
         run_time = end_time - start_time
         run_times.append(run_time)
