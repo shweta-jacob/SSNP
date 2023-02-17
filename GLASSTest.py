@@ -13,7 +13,7 @@ import yaml
 from ray import tune
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 from torch.optim import Adam, lr_scheduler
-from torch_geometric.nn import MLP, GINConv, Linear
+from torch_geometric.nn import MLP, GINConv, Linear, GraphNorm
 
 import datasets
 from impl import models, SubGDataset, train, metrics, utils, config
@@ -116,8 +116,8 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
                             jk=jk,
                             dropout=dropout,
                             conv=functools.partial(GINConv, nn=nn.Sequential(
-                                Linear(hidden_dim, hidden_dim), nn.ELU(), nn.Dropout(0.5),
-                                Linear(hidden_dim, hidden_dim))))
+                                Linear(hidden_dim, hidden_dim), nn.ReLU(), GraphNorm(hidden_dim),
+                                nn.Dropout(dropout), Linear(hidden_dim, hidden_dim))))
 
     # use pretrained node embeddings.
     if args.use_nodeid:
