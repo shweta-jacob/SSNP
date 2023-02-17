@@ -223,7 +223,7 @@ class COMGraphConv(torch.nn.Module):
         return x
 
 
-class EmbZGConv(nn.Module):
+class COMGraphLayerNet(nn.Module):
     '''
     combination of some GLASSConv layers, normalization layers, dropout layers, and activation function.
     Args:
@@ -294,12 +294,6 @@ class EmbZGConv(nn.Module):
         xs = []
         x = F.dropout(x, p=self.dropout, training=self.training)
         # pass messages at each layer.
-        if z is None:
-            mask = (torch.zeros(
-                (x.shape[0]), device=x.device) < 0.5).reshape(-1, 1)
-        else:
-            mask = (z > 0.5).reshape(-1, 1)
-
         for layer, conv in enumerate(self.convs[:-1]):
             x = conv(x, edge_index, edge_weight)
             xs.append(x)
@@ -370,15 +364,12 @@ class SizePool(AddPool):
         return self.pool_fn(x, batch)
 
 
-class GLASS(nn.Module):
+class COMGraphMasterNet(nn.Module):
     '''
-    GLASS model: combine message passing layers and mlps and pooling layers.
-    Args:
-        preds and pools are ModuleList containing the same number of MLPs and Pooling layers.
-        preds[id] and pools[id] is used to predict the id-th target. Can be used for SSL.
+    Fork of GLASS but with (m, M, samples) driven sampling of inside and outside the subgraphs
     '''
 
-    def __init__(self, conv: EmbZGConv, preds: nn.ModuleList,
+    def __init__(self, conv: COMGraphLayerNet, preds: nn.ModuleList,
                  pools: nn.ModuleList, model_type, hidden_dim, conv_layer, samples, m, M, stochastic, diffusion):
         super().__init__()
         self.conv = conv

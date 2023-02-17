@@ -68,7 +68,8 @@ def split(args, hypertuning=False):
     trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
     tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
-    trn_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, views=args.views, device=config.device)
+    trn_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, views=args.views,
+                                device=config.device)
     val_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device)
     tst_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device)
 
@@ -109,15 +110,15 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
         z_ratio: see GLASSConv in impl/model.py. Z_ratio in [0.5, 1].
         aggr: aggregation method. mean, sum, or gcn.
     '''
-    conv = models.EmbZGConv(hidden_dim,
-                            hidden_dim,
-                            conv_layer,
-                            max_deg=max_deg,
-                            activation=nn.ELU(inplace=True),
-                            jk=jk,
-                            dropout=dropout,
-                            conv=functools.partial(COMGraphConv, aggr=aggr, dropout=dropout),
-                            gn=True)
+    conv = models.COMGraphLayerNet(hidden_dim,
+                                   hidden_dim,
+                                   conv_layer,
+                                   max_deg=max_deg,
+                                   activation=nn.ELU(inplace=True),
+                                   jk=jk,
+                                   dropout=dropout,
+                                   conv=functools.partial(COMGraphConv, aggr=aggr, dropout=dropout),
+                                   gn=True)
 
     # use pretrained node embeddings.
     if args.use_nodeid:
@@ -157,8 +158,8 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
     else:
         raise NotImplementedError
 
-    gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]), pooling_layers, args.model, hidden_dim, conv_layer,
-                       args.samples, args.m, args.M, args.stochastic, args.diffusion).to(
+    gnn = models.COMGraphMasterNet(conv, torch.nn.ModuleList([mlp]), pooling_layers, args.model, hidden_dim, conv_layer,
+                                   args.samples, args.m, args.M, args.stochastic, args.diffusion).to(
         config.device)
 
     print("-" * 64)
