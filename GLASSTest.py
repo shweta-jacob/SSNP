@@ -12,15 +12,18 @@ import torch.nn as nn
 import yaml
 from ray import tune
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
-from torch.optim import Adam
-from torch_geometric.nn import MLP, GCNConv
+from torch.optim import Adam, lr_scheduler
+from torch_geometric.nn import MLP
 
 import datasets
 from impl import models, SubGDataset, train, metrics, utils, config
 import warnings
 
+from impl.models import COMGraphConv
+
 warnings.simplefilter('ignore', FutureWarning)
 warnings.simplefilter('ignore', UserWarning)
+warnings.simplefilter('ignore', RuntimeWarning)
 
 trn_dataset, val_dataset, tst_dataset = None, None, None
 max_deg, output_channels = 0, 1
@@ -29,7 +32,7 @@ loss_fn = None
 
 
 def set_seed(seed: int):
-    print("seed ", seed)
+    print("seed = ", seed)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -65,7 +68,8 @@ def split(args, hypertuning=False):
     trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
     tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
-    trn_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, views=args.views, device=config.device)
+    trn_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, views=args.views,
+                                device=config.device)
     val_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device)
     tst_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device)
 
@@ -106,15 +110,15 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
         z_ratio: see GLASSConv in impl/model.py. Z_ratio in [0.5, 1].
         aggr: aggregation method. mean, sum, or gcn.
     '''
-    conv = models.EmbZGConv(hidden_dim,
-                            hidden_dim,
-                            conv_layer,
-                            max_deg=max_deg,
-                            activation=nn.ELU(inplace=True),
-                            jk=jk,
-                            dropout=dropout,
-                            conv=functools.partial(GCNConv),
-                            gn=True)
+    conv = models.COMGraphLayerNet(hidden_dim,
+                                   hidden_dim,
+                                   conv_layer,
+                                   max_deg=max_deg,
+                                   activation=nn.ELU(inplace=True),
+                                   jk=jk,
+                                   dropout=dropout,
+                                   conv=functools.partial(COMGraphConv, aggr=aggr, dropout=dropout),
+                                   gn=True)
 
     # use pretrained node embeddings.
     if args.use_nodeid:
@@ -154,8 +158,8 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
     else:
         raise NotImplementedError
 
-    gnn = models.GLASS(conv, torch.nn.ModuleList([mlp]), pooling_layers, args.model, hidden_dim, conv_layer,
-                       args.samples, args.m, args.M, args.stochastic, args.diffusion).to(
+    gnn = models.COMGraphMasterNet(conv, torch.nn.ModuleList([mlp]), pooling_layers, args.model, hidden_dim, conv_layer,
+                                   args.samples, args.m, args.M, args.stochastic, args.diffusion).to(
         config.device)
 
     print("-" * 64)
@@ -200,6 +204,9 @@ def test(pool1="size",
     if args.dataset in ["density", "component", "cut_ratio", "coreness"]:
         num_div /= 5
 
+    print(f"Warmup and early stop steps are set to 100/{num_div}  = {100 / num_div}")
+    print("-" * 64)
+
     outs = []
     run_times = []
     trn_time = []
@@ -209,7 +216,12 @@ def test(pool1="size",
         start_time = time.time()
         if not hypertuning:
             set_seed(repeat + 1)
-        print(f"repeat {repeat}")
+        print(f"repeat = {repeat}")
+
+        tst_average = np.average(outs)
+        tst_error = np.std(outs) / np.sqrt(len(outs))
+        print(f"Average so far for {repeat} runs: {tst_average :.3f} ± {tst_error :.3f}")
+
         start_pre = time.time()
         split(args, hypertuning)
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio,
@@ -220,6 +232,11 @@ def test(pool1="size",
         end_pre = time.time()
         preproc_times.append(end_pre - start_pre)
         optimizer = Adam(gnn.parameters(), lr=lr)
+
+        scd = lr_scheduler.ReduceLROnPlateau(optimizer,
+                                             factor=resi,
+                                             min_lr=5e-5)
+
         val_score = 0
         tst_score = 0
         early_stop = 0
@@ -227,8 +244,9 @@ def test(pool1="size",
             t1 = time.time()
             trn_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn, device=config.device)
             trn_time.append(time.time() - t1)
+            scd.step(loss)
 
-            if i >= 0:
+            if i >= 100 / num_div:
                 score, _ = train.test(gnn,
                                       val_loader,
                                       score_fn,
@@ -280,7 +298,7 @@ def test(pool1="size",
                             f"Best picked so far- val: {val_score:.4f} tst: {tst_score:.4f}, early stop: {early_stop} \n")
             if val_score >= 1 - 1e-5:
                 early_stop += 1
-            if early_stop >= 50:
+            if early_stop > (100 / num_div):
                 print("Patience exhausted. Early stopping.")
                 break
         end_time = time.time()
@@ -292,14 +310,14 @@ def test(pool1="size",
             flush=True)
         outs.append(tst_score * 100)
     print(f"Time for {args.dataset} dataset and model {args.model}")
-    print(f"Average run time: {np.average(run_times):.3f} with std {np.std(run_times):.3f}")
-    print(f"Average preprocessing time: {np.average(preproc_times):.3f} with std {np.std(preproc_times):.3f}")
-    print(f"Average train time: {np.average(trn_time):.3f} with std {np.std(trn_time):.3f}")
-    print(f"Average inference time: {np.average(inference_time):.3f} with std {np.std(inference_time):.3f}")
+    print(f"Average run time: {np.average(run_times):.3f} ± {np.std(run_times):.3f}")
+    print(f"Average preprocessing time: {np.average(preproc_times):.3f} ± {np.std(preproc_times):.3f}")
+    print(f"Average train time: {np.average(trn_time):.3f} ± {np.std(trn_time):.3f}")
+    print(f"Average inference time: {np.average(inference_time):.3f} ± {np.std(inference_time):.3f}")
     tst_average = np.average(outs)
     tst_error = np.std(outs) / np.sqrt(len(outs))
     print(
-        f"average {tst_average :.3f} error {tst_error :.3f}"
+        f"average {tst_average :.3f} ± {tst_error :.3f}"
     )
     exp_results = {}
     exp_results[f"{args.dataset}_model{args.model}"] = {
