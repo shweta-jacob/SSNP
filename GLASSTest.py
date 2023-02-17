@@ -13,13 +13,13 @@ import yaml
 from ray import tune
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 from torch.optim import Adam, lr_scheduler
-from torch_geometric.nn import MLP, GCNConv
+from torch_geometric.nn import MLP
 
 import datasets
 from impl import models, SubGDataset, train, metrics, utils, config
 import warnings
 
-from impl.models import GLASSConv, MyGCNConv, COMGraphConv
+from impl.models import COMGraphConv
 
 warnings.simplefilter('ignore', FutureWarning)
 warnings.simplefilter('ignore', UserWarning)
