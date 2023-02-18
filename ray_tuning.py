@@ -17,9 +17,9 @@ init(log_to_driver=False)
 
 class HyperParameterTuning:
     MAX_EPOCHS = 300
-    CPUS_AVAIL = 20
-    GPUS_AVAIL = 1
-    NUM_SAMPLES = 1
+    CPUS_AVAIL = 5
+    GPUS_AVAIL = 0.25
+    NUM_SAMPLES = 5
 
     seed = 42  # not used
 
@@ -42,6 +42,7 @@ class ComGraphArguments:
         self.use_one = False
         self.use_maxzeroone = False
         self.stochastic = True
+        self.views = 1
 
 
 def ray_tune_helper(identifier, output_path, dataset):
