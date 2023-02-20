@@ -65,18 +65,18 @@ def split(args, hypertuning=False):
         raise NotImplementedError
 
     max_deg = torch.max(baseG.x)
+    N = baseG.x.shape[0]
+    E = baseG.edge_index.size()[-1]
+    sparse_adj = SparseTensor(
+        row=baseG.edge_index[0], col=baseG.edge_index[1],
+        value=torch.arange(E, device="cpu"),
+        sparse_sizes=(N, N))
+    row, col, _ = sparse_adj.csr()
     baseG.to(config.device)
     # split data
     trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
     tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
-    N = trn_dataset.x.shape[0]
-    E = trn_dataset.edge_index.size()[-1]
-    sparse_adj = SparseTensor(
-        row=trn_dataset.edge_index[0], col=trn_dataset.edge_index[1],
-        value=torch.arange(E, device="cpu"),
-        sparse_sizes=(N, N))
-    row, col, _ = sparse_adj.csr()
     trn_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, views=args.views,
                                 device=config.device, row=row, col=col)
     val_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device, row=row, col=col)
