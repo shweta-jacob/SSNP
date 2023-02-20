@@ -212,6 +212,9 @@ def test(pool1="size",
     trn_time = []
     inference_time = []
     preproc_times = []
+
+    print(f"Warm up for {100 / num_div} steps in progress...")
+
     for repeat in range(args.repeat):
         start_time = time.time()
         if not hypertuning:
