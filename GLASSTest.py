@@ -198,14 +198,6 @@ def test(pool1="size",
     '''
     outs = []
     t1 = time.time()
-    # we set batch_size = tst_dataset.y.shape[0] // num_div.
-    num_div = tst_dataset.y.shape[0] / batch_size
-    # we use num_div to calculate the number of iteration per epoch and count the number of iteration.
-    if args.dataset in ["density", "component", "cut_ratio", "coreness"]:
-        num_div /= 5
-
-    print(f"Warmup and early stop steps are set to 100/{num_div}  = {100 / num_div}")
-    print("-" * 64)
 
     outs = []
     run_times = []
@@ -213,7 +205,6 @@ def test(pool1="size",
     inference_time = []
     preproc_times = []
 
-    print(f"Warm up for {100 / num_div} steps in progress...")
 
     for repeat in range(args.repeat):
         start_time = time.time()
@@ -227,6 +218,14 @@ def test(pool1="size",
 
         start_pre = time.time()
         split(args, hypertuning)
+        # we set batch_size = tst_dataset.y.shape[0] // num_div.
+        num_div = tst_dataset.y.shape[0] / batch_size
+        # we use num_div to calculate the number of iteration per epoch and count the number of iteration.
+        if args.dataset in ["density", "component", "cut_ratio", "coreness"]:
+            num_div /= 5
+
+        print(f"Warmup and early stop steps are set to 100/{num_div}  = {100 / num_div}")
+        print("-" * 64)
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio,
                          aggr, args, hypertuning)
         trn_loader = loader_fn(trn_dataset, batch_size, repeat + 1)
@@ -243,6 +242,7 @@ def test(pool1="size",
         val_score = 0
         tst_score = 0
         early_stop = 0
+        print(f"Warm up for {100 / num_div} steps in progress...")
         for i in range(300):
             t1 = time.time()
             trn_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn, device=config.device,
@@ -406,7 +406,6 @@ def run_helper(argument_class, hypertuning=False):
     pprint(params)
     print("-" * 64)
 
-    split(argument_class, hypertuning)
     params.update({'args': argument_class,
                    'hypertuning': hypertuning})
     test(**(params))
