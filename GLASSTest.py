@@ -354,9 +354,9 @@ def run_helper(argument_class, hypertuning=False):
     if argument_class.use_seed:
         if not hypertuning:
             set_seed(0)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-        torch.backends.cudnn.enabled = False
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
+            torch.backends.cudnn.enabled = False
 
     baseG = datasets.load_dataset(argument_class.dataset, hypertuning)
 
