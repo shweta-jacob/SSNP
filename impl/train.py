@@ -1,6 +1,14 @@
+import random
+import numpy as np
 import torch
 
-from GLASSTest import set_seed
+
+def set_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # multi gpu
 
 
 def train(optimizer, model, dataloader, metrics, loss_fn, device, run, epoch):
