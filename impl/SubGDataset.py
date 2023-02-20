@@ -8,6 +8,8 @@ from torch.utils.data import DataLoader
 from torch_sparse import SparseTensor
 from tqdm import tqdm
 
+from GLASSTest import set_seed
+
 
 class GDataset:
     '''
@@ -18,13 +20,14 @@ class GDataset:
             For example, [[0, 1, 2], [6, 7, -1]] means two subgraphs containing nodes 0, 1, 2 and 6, 7 respectively.
         y : the target of subgraphs.
     '''
+
     def __init__(self, x, edge_index, edge_attr, pos, y):
-        self.x=x
-        self.edge_index=edge_index
-        self.edge_attr=edge_attr
-        self.y=y
-        self.pos=pos
-        self.comp=pos
+        self.x = x
+        self.edge_index = edge_index
+        self.edge_attr = edge_attr
+        self.y = y
+        self.pos = pos
+        self.comp = pos
         self.num_nodes = x.shape[0]
 
     def __len__(self):
@@ -88,12 +91,14 @@ class GDataloader(DataLoader):
     '''
     Dataloader for GDataset
     '''
-    def __init__(self, Gdataset, batch_size=64, shuffle=True, drop_last=False):
+
+    def __init__(self, Gdataset, batch_size=64, shuffle=True, drop_last=False, seed=-1):
         super(GDataloader,
               self).__init__(torch.arange(len(Gdataset)).to(Gdataset.x.device),
                              batch_size=batch_size,
                              shuffle=shuffle,
                              drop_last=drop_last)
+        set_seed(seed)
         self.Gdataset = Gdataset
 
     def get_x(self):
@@ -130,6 +135,7 @@ class ZGDataloader(GDataloader):
     Args:
         z_fn: assigning node label for each batch.
     '''
+
     def __init__(self,
                  Gdataset,
                  batch_size=64,

@@ -93,11 +93,11 @@ def split(args, hypertuning=False):
             return tfunc(ds, bs, True, False)
     else:
 
-        def loader_fn(ds, bs):
-            return SubGDataset.GDataloader(ds, bs)
+        def loader_fn(ds, bs, seed):
+            return SubGDataset.GDataloader(ds, bs, seed=seed)
 
-        def tloader_fn(ds, bs):
-            return SubGDataset.GDataloader(ds, bs, shuffle=True)
+        def tloader_fn(ds, bs, seed):
+            return SubGDataset.GDataloader(ds, bs, shuffle=True, seed=seed)
 
 
 def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr, args=None, hypertuning=False):
@@ -229,9 +229,9 @@ def test(pool1="size",
         split(args, hypertuning)
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio,
                          aggr, args, hypertuning)
-        trn_loader = loader_fn(trn_dataset, batch_size)
-        val_loader = tloader_fn(val_dataset, batch_size)
-        tst_loader = tloader_fn(tst_dataset, batch_size)
+        trn_loader = loader_fn(trn_dataset, batch_size, repeat + 1)
+        val_loader = tloader_fn(val_dataset, batch_size, repeat + 1)
+        tst_loader = tloader_fn(tst_dataset, batch_size, repeat + 1)
         end_pre = time.time()
         preproc_times.append(end_pre - start_pre)
         optimizer = Adam(gnn.parameters(), lr=lr)
@@ -245,7 +245,8 @@ def test(pool1="size",
         early_stop = 0
         for i in range(300):
             t1 = time.time()
-            trn_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn, device=config.device)
+            trn_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn, device=config.device,
+                                          run=repeat + 1, epoch=i)
             trn_time.append(time.time() - t1)
             scd.step(loss)
 
@@ -253,7 +254,7 @@ def test(pool1="size",
                 score, _ = train.test(gnn,
                                       val_loader,
                                       score_fn,
-                                      loss_fn=loss_fn, device=config.device)
+                                      loss_fn=loss_fn, device=config.device, run=repeat + 1, epoch=i)
 
                 if score > val_score:
                     early_stop = 0
@@ -262,7 +263,7 @@ def test(pool1="size",
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
-                                          loss_fn=loss_fn, device=config.device)
+                                          loss_fn=loss_fn, device=config.device, run=repeat + 1, epoch=i)
                     inf_end = time.time()
                     inference_time.append(inf_end - inf_start)
                     tst_score = score
@@ -277,7 +278,7 @@ def test(pool1="size",
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
-                                          loss_fn=loss_fn, device=config.device)
+                                          loss_fn=loss_fn, device=config.device, run=repeat + 1, epoch=i)
                     inf_end = time.time()
                     inference_time.append(inf_end - inf_start)
                     tst_score = max(score, tst_score)
@@ -291,7 +292,8 @@ def test(pool1="size",
                     early_stop += 1
                     if i % 10 == 0:
                         inf_start = time.time()
-                        test = train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn, device=config.device)
+                        test = train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn, device=config.device,
+                                          run=repeat + 1, epoch=i)
                         inf_end = time.time()
                         inference_time.append(inf_end - inf_start)
                         print(

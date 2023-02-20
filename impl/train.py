@@ -1,7 +1,9 @@
 import torch
 
+from GLASSTest import set_seed
 
-def train(optimizer, model, dataloader, metrics, loss_fn, device):
+
+def train(optimizer, model, dataloader, metrics, loss_fn, device, run, epoch):
     '''
     Train models in an epoch.
     '''
@@ -9,6 +11,7 @@ def train(optimizer, model, dataloader, metrics, loss_fn, device):
     total_loss = []
     ys = []
     preds = []
+    set_seed(epoch + run * 1000)
     for batch in dataloader:
         optimizer.zero_grad()
         pred = model(*batch[:-1], device=device, id=0)
@@ -24,13 +27,14 @@ def train(optimizer, model, dataloader, metrics, loss_fn, device):
 
 
 @torch.no_grad()
-def test(model, dataloader, metrics, loss_fn, device):
+def test(model, dataloader, metrics, loss_fn, device, run, epoch):
     '''
     Test models either on validation dataset or test dataset.
     '''
     model.eval()
     preds = []
     ys = []
+    set_seed(epoch + run * 1000)
     for batch in dataloader:
         pred = model(*batch[:-1], device=device)
         preds.append(pred)
