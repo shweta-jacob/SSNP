@@ -460,17 +460,8 @@ class COMGraphMasterNet(nn.Module):
 
         return emb
 
-    def forward(self, x, edge_index, edge_weight, subG_node, comp_node, z=None, device=None, id=0):
+    def forward(self, x, edge_index, edge_weight, subG_node, comp_node, row=None, col=None, z=None, device=None, id=0):
         emb = self.NodeEmb(x, edge_index, edge_weight)
-
-        N = x.shape[0]
-        E = edge_index.size()[-1]
-        sparse_adj = SparseTensor(
-            row=edge_index[0].to(device), col=edge_index[1].to(device),
-            value=torch.arange(E, device=device),
-            sparse_sizes=(N, N))
-        row, col, _ = sparse_adj.csr()
-
         emb = self.Pool(emb, subG_node, comp_node, self.pools, edge_index, device, row, col)
         return self.preds[id](emb)
 

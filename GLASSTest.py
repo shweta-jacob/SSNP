@@ -14,6 +14,7 @@ from ray import tune
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 from torch.optim import Adam, lr_scheduler
 from torch_geometric.nn import MLP
+from torch_sparse import SparseTensor
 
 import datasets
 from impl import models, SubGDataset, train, metrics, utils, config
@@ -47,6 +48,7 @@ def split(args, hypertuning=False):
     # initialize and split dataset
     global trn_dataset, val_dataset, tst_dataset, baseG
     global max_deg, output_channels, loader_fn, tloader_fn
+    global row, col
     baseG = datasets.load_dataset(args.dataset, hypertuning)
     if baseG.y.unique().shape[0] == 2:
         baseG.y = baseG.y.to(torch.float)
@@ -68,10 +70,17 @@ def split(args, hypertuning=False):
     trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
     tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
+    N = trn_dataset.x.shape[0]
+    E = trn_dataset.edge_index.size()[-1]
+    sparse_adj = SparseTensor(
+        row=trn_dataset.edge_index[0], col=trn_dataset.edge_index[1],
+        value=torch.arange(E, device="cpu"),
+        sparse_sizes=(N, N))
+    row, col, _ = sparse_adj.csr()
     trn_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, views=args.views,
-                                device=config.device)
-    val_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device)
-    tst_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device)
+                                device=config.device, row=row, col=col)
+    val_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device, row=row, col=col)
+    tst_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device, row=row, col=col)
 
     trn_dataset = trn_dataset.to(config.device)
     val_dataset = val_dataset.to(config.device)
@@ -246,7 +255,7 @@ def test(pool1="size",
         for i in range(300):
             t1 = time.time()
             trn_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn, device=config.device,
-                                          run=repeat + 1, epoch=i)
+                                          row=row, col=col, run=repeat + 1, epoch=i)
             trn_time.append(time.time() - t1)
             scd.step(loss)
 
@@ -254,7 +263,7 @@ def test(pool1="size",
                 score, _ = train.test(gnn,
                                       val_loader,
                                       score_fn,
-                                      loss_fn=loss_fn, device=config.device, run=repeat + 1, epoch=i)
+                                      loss_fn=loss_fn, device=config.device, row=row, col=col, run=repeat + 1, epoch=i)
 
                 if score > val_score:
                     early_stop = 0
@@ -263,7 +272,7 @@ def test(pool1="size",
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
-                                          loss_fn=loss_fn, device=config.device, run=repeat + 1, epoch=i)
+                                          loss_fn=loss_fn, device=config.device, row=row, col=col, run=repeat + 1, epoch=i)
                     inf_end = time.time()
                     inference_time.append(inf_end - inf_start)
                     tst_score = score
@@ -278,7 +287,7 @@ def test(pool1="size",
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
-                                          loss_fn=loss_fn, device=config.device, run=repeat + 1, epoch=i)
+                                          loss_fn=loss_fn, device=config.device, row=row, col=col, run=repeat + 1, epoch=i)
                     inf_end = time.time()
                     inference_time.append(inf_end - inf_start)
                     tst_score = max(score, tst_score)
@@ -293,7 +302,7 @@ def test(pool1="size",
                     if i % 10 == 0:
                         inf_start = time.time()
                         test = train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn, device=config.device,
-                                          run=repeat + 1, epoch=i)
+                                          row=row, col=col, run=repeat + 1, epoch=i)
                         inf_end = time.time()
                         inference_time.append(inf_end - inf_start)
                         print(

@@ -36,16 +36,11 @@ class GDataset:
     def __getitem__(self, idx):
         return self.pos[idx], self.y[idx]
 
-    def sample_pos_comp(self, samples, m, M, stoch, views=1, device=0):
+    def sample_pos_comp(self, samples, m, M, stoch, views=1, device=0, row=None, col=None):
         if not stoch:
             print("Setting up non-stochastic data")
-            N = self.x.shape[0]
-            E = self.edge_index.size()[-1]
-            sparse_adj = SparseTensor(
-                row=self.edge_index[0].to(device), col=self.edge_index[1].to(device),
-                value=torch.arange(E, device=device),
-                sparse_sizes=(N, N))
-            row, col, _ = sparse_adj.csr()
+            row = row.to(device)
+            col = col.to(device)
             y = []
             batch_comp_nodes = []
             subgraph_nodes_list = []
