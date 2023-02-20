@@ -1,5 +1,5 @@
 aggr: mean
-batch_size: 128
+batch_size: 256
 conv_layer: 3
 dropout: 0.5
 hidden_dim: 64
