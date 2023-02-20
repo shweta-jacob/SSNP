@@ -1,3 +1,5 @@
+from torch_geometric import seed_everything
+seed_everything(42)
 import argparse
 import functools
 import json
@@ -218,7 +220,8 @@ def test(pool1="size",
     for repeat in range(args.repeat):
         start_time = time.time()
         if not hypertuning:
-            set_seed(repeat + 1)
+            pass
+            # set_seed(repeat + 1)
         print(f"repeat = {repeat}")
 
         tst_average = np.average(outs)
@@ -356,7 +359,7 @@ def run_helper(argument_class, hypertuning=False):
 
     if argument_class.use_seed:
         if not hypertuning:
-            set_seed(0)
+            # set_seed(0)
             torch.backends.cudnn.deterministic = True
             torch.backends.cudnn.benchmark = False
             torch.backends.cudnn.enabled = False
