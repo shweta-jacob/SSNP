@@ -324,14 +324,14 @@ def test(pool1="size",
             flush=True)
         outs.append(tst_score * 100)
     print(f"Time for {args.dataset} dataset and model {args.model}")
-    print(f"Average run time: {np.average(run_times):.3f} ± {np.std(run_times):.3f}")
-    print(f"Average preprocessing time: {np.average(preproc_times):.3f} ± {np.std(preproc_times):.3f}")
-    print(f"Average train time: {np.average(trn_time):.3f} ± {np.std(trn_time):.3f}")
-    print(f"Average inference time: {np.average(inference_time):.3f} ± {np.std(inference_time):.3f}")
+    print(f"Average run time: {np.average(run_times):.2f} ± {np.std(run_times):.2f}")
+    print(f"Average preprocessing time: {np.average(preproc_times):.2f} ± {np.std(preproc_times):.2f}")
+    print(f"Average train time: {np.average(trn_time):.2f} ± {np.std(trn_time):.3f}")
+    print(f"Average inference time: {np.average(inference_time):.2f} ± {np.std(inference_time):.2f}")
     tst_average = np.average(outs)
     tst_error = np.std(outs) / np.sqrt(len(outs))
     print(
-        f"average {tst_average :.3f} ± {tst_error :.3f}"
+        f"Test Accuracyg {tst_average :.2f} ± {tst_error :.2f}"
     )
     exp_results = {}
     exp_results[f"{args.dataset}_model{args.model}"] = {
