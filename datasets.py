@@ -85,7 +85,7 @@ class BaseGraph(Data):
         return self
 
 
-def load_dataset(name: str):
+def load_dataset(name: str, hypertuning=False):
     # To use your own dataset, add a branch returning a BaseGraph Object here.
     if name in ["coreness", "cut_ratio", "density", "component"]:
         obj = np.load(f"./dataset_/{name}/tmp.npy", allow_pickle=True).item()
@@ -99,7 +99,7 @@ def load_dataset(name: str):
                                 batch_first=True,
                                 padding_value=-1)
         subGLabel = torch.tensor([ord(i) - ord('A') for i in obj["subGLabel"]])
-        #mask = torch.tensor(obj['mask'])
+        # mask = torch.tensor(obj['mask'])
         cnt = subG_pad.shape[0]
         mask = torch.cat(
             (torch.zeros(cnt - cnt // 2, dtype=torch.int64),
@@ -108,7 +108,7 @@ def load_dataset(name: str):
         mask = mask[torch.randperm(mask.shape[0])]
         return BaseGraph(torch.empty(
             (len(node), 1, 0)), torch.from_numpy(edge),
-                         torch.ones(edge.shape[1]), subG_pad, subGLabel, mask)
+            torch.ones(edge.shape[1]), subG_pad, subGLabel, mask)
     elif name in ["ppi_bp", "hpo_metab", "hpo_neuro", "em_user"]:
         multilabel = False
 
@@ -174,16 +174,17 @@ def load_dataset(name: str):
             test_sub_G_label = torch.load(
                 f"./dataset/{name}/test_sub_G_label.pt")
         else:
+            # read from servers
             train_sub_G, train_sub_G_label, val_sub_G, val_sub_G_label, test_sub_G, test_sub_G_label = read_subgraphs(
-                f"./dataset/{name}/subgraphs.pth")
-            torch.save(train_sub_G, f"./dataset/{name}/train_sub_G.pt")
+                f"/media/nvme/poll/extended-GLASS/dataset/{name}/subgraphs.pth")
+            torch.save(train_sub_G, f"/media/nvme/poll/extended-GLASS/dataset/{name}/train_sub_G.pt")
             torch.save(train_sub_G_label,
-                       f"./dataset/{name}/train_sub_G_label.pt")
-            torch.save(val_sub_G, f"./dataset/{name}/val_sub_G.pt")
-            torch.save(val_sub_G_label, f"./dataset/{name}/val_sub_G_label.pt")
-            torch.save(test_sub_G, f"./dataset/{name}/test_sub_G.pt")
+                       f"/media/nvme/poll/extended-GLASS/dataset/{name}/train_sub_G_label.pt")
+            torch.save(val_sub_G, f"/media/nvme/poll/extended-GLASS/dataset/{name}/val_sub_G.pt")
+            torch.save(val_sub_G_label, f"/media/nvme/poll/extended-GLASS/dataset/{name}/val_sub_G_label.pt")
+            torch.save(test_sub_G, f"/media/nvme/poll/extended-GLASS/dataset/{name}/test_sub_G.pt")
             torch.save(test_sub_G_label,
-                       f"./dataset/{name}/test_sub_G_label.pt")
+                       f"/media/nvme/poll/extended-GLASS/dataset/{name}/test_sub_G_label.pt")
         mask = torch.cat(
             (torch.zeros(len(train_sub_G_label), dtype=torch.int64),
              torch.ones(len(val_sub_G_label), dtype=torch.int64),
@@ -202,7 +203,10 @@ def load_dataset(name: str):
             [torch.tensor(i) for i in train_sub_G + val_sub_G + test_sub_G],
             batch_first=True,
             padding_value=-1)
-        rawedge = nx.read_edgelist(f"./dataset/{name}/edge_list.txt").edges
+        path_to_edge_list = f"dataset/{name}/edge_list.txt"
+        if hypertuning:
+            path_to_edge_list = os.path.join('/media/nvme/poll/extended-GLASS/', path_to_edge_list)
+        rawedge = nx.read_edgelist(path_to_edge_list).edges
         edge_index = torch.tensor([[int(i[0]), int(i[1])]
                                    for i in rawedge]).t()
         num_node = max([torch.max(pos), torch.max(edge_index)]) + 1

@@ -1,10 +1,10 @@
 aggr: gcn
-batch_size: 1000
-conv_layer: 3
+batch_size: 59
+conv_layer: 2
 dropout: 0.5
 hidden_dim: 64
 lr: 0.001
-pool1: sum
-pool2: sum
+pool1: size
+pool2: size
 resi: 0.2
-z_ratio: 0.55
+z_ratio: 0
