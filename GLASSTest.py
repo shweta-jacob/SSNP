@@ -318,7 +318,7 @@ print(args)
 path = f"config/{args.dataset}.yml"
 if args.compare_with_comgraph:
     path = f"compl-config/{args.dataset}.yml"
-with open(f"config/{args.dataset}.yml") as f:
+with open(path) as f:
     params = yaml.safe_load(f)
 
 print("params", params, flush=True)
