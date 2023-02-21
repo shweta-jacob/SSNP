@@ -28,6 +28,7 @@ parser.add_argument('--use_maxzeroone', action='store_true')
 parser.add_argument('--repeat', type=int, default=1)
 parser.add_argument('--device', type=int, default=0)
 parser.add_argument('--use_seed', action='store_true')
+parser.add_argument('--compare_with_comgraph', action='store_true')
 
 args = parser.parse_args()
 config.set_device(args.device)
@@ -58,6 +59,7 @@ if baseG.y.unique().shape[0] == 2:
     # binary classification task
     def loss_fn(x, y):
         return BCEWithLogitsLoss()(x.flatten(), y.flatten())
+
 
     baseG.y = baseG.y.to(torch.float)
     if baseG.y.ndim > 1:
@@ -310,8 +312,12 @@ def test(pool="size",
     with open(f"{args.dataset}_results.json", 'w') as output_file:
         json.dump(exp_results, output_file)
 
+
 print(args)
 # read configuration
+path = f"config/{args.dataset}.yml"
+if args.compare_with_comgraphg:
+    path = f"compl-config/{args.dataset}.yml"
 with open(f"config/{args.dataset}.yml") as f:
     params = yaml.safe_load(f)
 
