@@ -93,7 +93,7 @@ class GDataloader(DataLoader):
                              batch_size=batch_size,
                              shuffle=shuffle,
                              drop_last=drop_last)
-        set_seed(seed)
+        # set_seed(seed)
         self.Gdataset = Gdataset
 
     def get_x(self):
