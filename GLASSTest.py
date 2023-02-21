@@ -320,6 +320,8 @@ if args.compare_with_comgraph:
     path = f"compl-config/{args.dataset}.yml"
 with open(path) as f:
     params = yaml.safe_load(f)
+    params['pool'] = params.pop('pool1')
+    params.pop('pool2')
 
 print("params", params, flush=True)
 split()
