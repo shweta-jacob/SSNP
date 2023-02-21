@@ -316,7 +316,7 @@ def test(pool="size",
 print(args)
 # read configuration
 path = f"config/{args.dataset}.yml"
-if args.compare_with_comgraphg:
+if args.compare_with_comgraph:
     path = f"compl-config/{args.dataset}.yml"
 with open(f"config/{args.dataset}.yml") as f:
     params = yaml.safe_load(f)
