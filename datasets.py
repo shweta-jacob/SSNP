@@ -176,15 +176,15 @@ def load_dataset(name: str, hypertuning=False):
         else:
             # read from servers
             train_sub_G, train_sub_G_label, val_sub_G, val_sub_G_label, test_sub_G, test_sub_G_label = read_subgraphs(
-                f"/media/nvme/poll/extended-GLASS/dataset/{name}/subgraphs.pth")
+                f"/media/nvme/sjacob/extended-GLASS/dataset/{name}/subgraphs.pth")
             torch.save(train_sub_G, f"/media/nvme/poll/extended-GLASS/dataset/{name}/train_sub_G.pt")
             torch.save(train_sub_G_label,
-                       f"/media/nvme/poll/extended-GLASS/dataset/{name}/train_sub_G_label.pt")
-            torch.save(val_sub_G, f"/media/nvme/poll/extended-GLASS/dataset/{name}/val_sub_G.pt")
-            torch.save(val_sub_G_label, f"/media/nvme/poll/extended-GLASS/dataset/{name}/val_sub_G_label.pt")
-            torch.save(test_sub_G, f"/media/nvme/poll/extended-GLASS/dataset/{name}/test_sub_G.pt")
+                       f"/media/nvme/sjacob/extended-GLASS/dataset/{name}/train_sub_G_label.pt")
+            torch.save(val_sub_G, f"/media/nvme/sjacob/extended-GLASS/dataset/{name}/val_sub_G.pt")
+            torch.save(val_sub_G_label, f"/media/nvme/sjacob/extended-GLASS/dataset/{name}/val_sub_G_label.pt")
+            torch.save(test_sub_G, f"/media/nvme/sjacob/extended-GLASS/dataset/{name}/test_sub_G.pt")
             torch.save(test_sub_G_label,
-                       f"/media/nvme/poll/extended-GLASS/dataset/{name}/test_sub_G_label.pt")
+                       f"/media/nvme/sjacob/extended-GLASS/dataset/{name}/test_sub_G_label.pt")
         mask = torch.cat(
             (torch.zeros(len(train_sub_G_label), dtype=torch.int64),
              torch.ones(len(val_sub_G_label), dtype=torch.int64),
@@ -205,7 +205,7 @@ def load_dataset(name: str, hypertuning=False):
             padding_value=-1)
         path_to_edge_list = f"dataset/{name}/edge_list.txt"
         if hypertuning:
-            path_to_edge_list = os.path.join('/media/nvme/poll/extended-GLASS/', path_to_edge_list)
+            path_to_edge_list = os.path.join('/media/nvme/sjacob/extended-GLASS/', path_to_edge_list)
         rawedge = nx.read_edgelist(path_to_edge_list).edges
         edge_index = torch.tensor([[int(i[0]), int(i[1])]
                                    for i in rawedge]).t()

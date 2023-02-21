@@ -78,9 +78,11 @@ def split(args, hypertuning=False):
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
     tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
     trn_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, views=args.views,
-                                device=config.device, row=row, col=col)
-    val_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device, row=row, col=col)
-    tst_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device, row=row, col=col)
+                                device=config.device, row=row, col=col, dataset=args.dataset)
+    val_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device,
+                                row=row, col=col, dataset=args.dataset)
+    tst_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device,
+                                row=row, col=col, dataset=args.dataset)
 
     trn_dataset = trn_dataset.to(config.device)
     val_dataset = val_dataset.to(config.device)

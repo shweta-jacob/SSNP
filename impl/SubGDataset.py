@@ -36,7 +36,7 @@ class GDataset:
     def __getitem__(self, idx):
         return self.pos[idx], self.y[idx]
 
-    def sample_pos_comp(self, samples, m, M, stoch, views=1, device=0, row=None, col=None):
+    def sample_pos_comp(self, samples, m, M, stoch, views=1, device=0, row=None, col=None, dataset="ppi_bp"):
         if not stoch:
             print("Setting up non-stochastic data")
             row = row.to(device)
@@ -70,7 +70,10 @@ class GDataset:
 
             self.pos = pad_sequence(subgraph_nodes_list, batch_first=True, padding_value=-1).to(torch.int64)
             self.comp = pad_sequence(batch_comp_nodes, batch_first=True, padding_value=-1).to(torch.int64)
-            self.y = torch.Tensor(y).to(torch.int64)
+            if dataset == "em_user":
+                self.y = torch.Tensor(y)
+            else:
+                self.y = torch.Tensor(y).to(torch.int64)
 
     def to(self, device):
         self.x = self.x.to(device)
