@@ -70,7 +70,9 @@ class GDataset:
 
             self.pos = pad_sequence(subgraph_nodes_list, batch_first=True, padding_value=-1).to(torch.int64)
             self.comp = pad_sequence(batch_comp_nodes, batch_first=True, padding_value=-1).to(torch.int64)
-            if dataset == "em_user":
+            if dataset == "hpo_neuro":
+                self.y = torch.vstack(y)
+            elif dataset == "em_user":
                 self.y = torch.Tensor(y)
             else:
                 self.y = torch.Tensor(y).to(torch.int64)
