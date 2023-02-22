@@ -136,7 +136,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
         print("load ", f"./Emb/{args.dataset}_{hidden_dim}.pt")
         path_to_emb = f"Emb/{args.dataset}_{hidden_dim}.pt"
         if hypertuning:
-            path_to_emb = os.path.join('/media/nvme/poll/extended-GLASS/', path_to_emb)
+            path_to_emb = os.path.join('/media/nvme/sjacob/extended-GLASS/', path_to_emb)
         emb = torch.load(path_to_emb, map_location=torch.device('cpu')).detach()
         conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
 
@@ -333,7 +333,7 @@ def test(pool1="size",
     tst_average = np.average(outs)
     tst_error = np.std(outs) / np.sqrt(len(outs))
     print(
-        f"Test Accuracyg {tst_average :.2f} ± {tst_error :.2f}"
+        f"Test Accuracy {tst_average :.2f} ± {tst_error :.2f}"
     )
     exp_results = {}
     exp_results[f"{args.dataset}_model{args.model}"] = {
@@ -408,7 +408,7 @@ def run_helper(argument_class, hypertuning=False):
     # read configuration
     path_to_config = f"compl-config/{argument_class.dataset}.yml"
     if hypertuning:
-        path_to_config = os.path.join('/media/nvme/poll/extended-GLASS/', path_to_config)
+        path_to_config = os.path.join('/media/nvme/sjacob/extended-GLASS/', path_to_config)
     with open(path_to_config) as f:
         params = yaml.safe_load(f)
     print("-" * 64)

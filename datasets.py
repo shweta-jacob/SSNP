@@ -177,7 +177,7 @@ def load_dataset(name: str, hypertuning=False):
             # read from servers
             train_sub_G, train_sub_G_label, val_sub_G, val_sub_G_label, test_sub_G, test_sub_G_label = read_subgraphs(
                 f"/media/nvme/sjacob/extended-GLASS/dataset/{name}/subgraphs.pth")
-            torch.save(train_sub_G, f"/media/nvme/poll/extended-GLASS/dataset/{name}/train_sub_G.pt")
+            torch.save(train_sub_G, f"/media/nvme/sjacob/extended-GLASS/dataset/{name}/train_sub_G.pt")
             torch.save(train_sub_G_label,
                        f"/media/nvme/sjacob/extended-GLASS/dataset/{name}/train_sub_G_label.pt")
             torch.save(val_sub_G, f"/media/nvme/sjacob/extended-GLASS/dataset/{name}/val_sub_G.pt")
