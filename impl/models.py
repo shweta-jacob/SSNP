@@ -401,7 +401,6 @@ class COMGraphMasterNet(nn.Module):
             emb_subg = emb[pos]
             emb = pool[0](emb_subg, batch)
         elif self.model_type == 1:
-            raise NotImplementedError("not implemented as of now")
             batch_comp, pos_comp = pad2batch(comp_node)
             emb_comp = emb[pos_comp]
             emb = pool[1](emb_comp, batch_comp)

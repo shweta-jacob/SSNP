@@ -74,9 +74,9 @@ def split(args, hypertuning=False):
     row, col, _ = sparse_adj.csr()
     baseG.to(config.device)
     # split data
-    trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
-    val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
-    tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
+    trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"), device=config.device)
+    val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"), device=config.device)
+    tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"), device=config.device)
     trn_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, views=args.views,
                                 device=config.device, row=row, col=col, dataset=args.dataset)
     val_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device,
@@ -142,7 +142,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
 
     num_rep = 1
     in_channels = hidden_dim * (1) * num_rep if jk else hidden_dim
-    if args.model == 0:
+    if args.model == 0 or args.model == 1:
         in_channels = hidden_dim * (conv_layer) * num_rep if jk else hidden_dim
     if args.model == 2 and not args.diffusion:
         # if MLP mixing is enabled, num_rep is 1 throughout, else it becomes 2
