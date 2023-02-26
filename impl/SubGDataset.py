@@ -1,15 +1,17 @@
 import math
 import random
 
-from torch.nn.utils.rnn import pad_sequence
-from torch_geometric.data import Data
+import numpy as np
 import torch
+from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader
-from torch_sparse import SparseTensor
-from tqdm import tqdm
 
-from GLASSTest import set_seed
-
+def set_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # multi gpu
 
 class GDataset:
     '''
