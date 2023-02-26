@@ -88,7 +88,7 @@ class BaseGraph(Data):
 def load_dataset(name: str, hypertuning=False):
     # To use your own dataset, add a branch returning a BaseGraph Object here.
     if name in ["coreness", "cut_ratio", "density", "component"]:
-        obj = np.load(f"./dataset_/{name}/tmp.npy", allow_pickle=True).item()
+        obj = np.load(f"/media/nvme/sjacob/extended-GLASS/dataset_/{name}/tmp.npy", allow_pickle=True).item()
         # copied from https://github.com/mims-harvard/SubGNN/blob/main/SubGNN/subgraph_utils.py
         edge = np.array([[i[0] for i in obj['G'].edges],
                          [i[1] for i in obj['G'].edges]])
