@@ -1,10 +1,10 @@
 aggr: sum
-batch_size: 200
+batch_size: 2
 conv_layer: 2
 dropout: 0.05
 hidden_dim: 20
 lr: 0.0067
-pool1: sum
-pool2: sum
+pool1: size
+pool2: size
 resi: 0.9
 z_ratio: 1
