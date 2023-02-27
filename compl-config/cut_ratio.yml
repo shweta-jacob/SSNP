@@ -1,5 +1,5 @@
 aggr: sum
-batch_size: 3
+batch_size: 10
 conv_layer: 1
 dropout: 0.3
 hidden_dim: 8

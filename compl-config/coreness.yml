@@ -1,6 +1,6 @@
 aggr: sum
-batch_size: 2
-conv_layer: 2
+batch_size: 20
+conv_layer: 3
 dropout: 0.05
 hidden_dim: 20
 lr: 0.0067

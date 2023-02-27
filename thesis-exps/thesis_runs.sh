@@ -2,3 +2,8 @@ python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset ppi_bp --model
 python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset hpo_metab --model 2 --samples 1 --m 1 --M 1 --stochastic --device 1
 python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset hpo_neuro --model 2 --samples 1 --m 1 --M 1 --stochastic --device 2
 python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset em_user --model 2 --samples 1 --m 1 --M 5 --stochastic --device 3
+
+python GLASSTest.py --use_one --use_seed --repeat 10 --dataset cut_ratio --model 2 --samples 1 --m 5 --M 1 --stochastic --device 0
+python GLASSTest.py --use_one --use_seed --repeat 10 --dataset coreness --model 2 --samples 1 --m 10 --M 2 --stochastic --device 1
+#python GLASSTest.py --use_one --use_seed --repeat 10 --dataset density --model 2 --samples 1 --m 5 --M 1 --stochastic --device 1
+python GLASSTest.py --use_one --use_seed --repeat 10 --dataset component --model 2 --samples 1 --m 100 --M 10 --stochastic --device 1
