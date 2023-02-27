@@ -13,7 +13,7 @@ import yaml
 from ray import tune
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 from torch.optim import Adam, lr_scheduler
-from torch_geometric.nn import MLP
+from torch_geometric.nn import MLP, GCNConv
 from torch_sparse import SparseTensor
 
 import datasets
@@ -121,6 +121,9 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
         z_ratio: see GLASSConv in impl/model.py. Z_ratio in [0.5, 1].
         aggr: aggregation method. mean, sum, or gcn.
     '''
+    conv = functools.partial(COMGraphConv, aggr=aggr, dropout=dropout)
+    if args.use_gcn_conv:
+        conv = functools.partial(GCNConv, add_self_loops=False)
     conv = models.COMGraphLayerNet(hidden_dim,
                                    hidden_dim,
                                    conv_layer,
@@ -128,7 +131,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
                                    activation=nn.ELU(inplace=True),
                                    jk=jk,
                                    dropout=dropout,
-                                   conv=functools.partial(COMGraphConv, aggr=aggr, dropout=dropout),
+                                   conv=conv,
                                    gn=True)
 
     # use pretrained node embeddings.
@@ -216,7 +219,6 @@ def test(pool1="size",
     inference_time = []
     preproc_times = []
 
-
     for repeat in range(args.repeat):
         start_time = time.time()
         if not hypertuning:
@@ -274,7 +276,8 @@ def test(pool1="size",
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
-                                          loss_fn=loss_fn, device=config.device, row=row, col=col, run=repeat + 1, epoch=i)
+                                          loss_fn=loss_fn, device=config.device, row=row, col=col, run=repeat + 1,
+                                          epoch=i)
                     inf_end = time.time()
                     inference_time.append(inf_end - inf_start)
                     tst_score = score
@@ -289,7 +292,8 @@ def test(pool1="size",
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
-                                          loss_fn=loss_fn, device=config.device, row=row, col=col, run=repeat + 1, epoch=i)
+                                          loss_fn=loss_fn, device=config.device, row=row, col=col, run=repeat + 1,
+                                          epoch=i)
                     inf_end = time.time()
                     inference_time.append(inf_end - inf_start)
                     tst_score = max(score, tst_score)
@@ -446,6 +450,8 @@ if __name__ == '__main__':
     parser.add_argument('--repeat', type=int, default=1)
     parser.add_argument('--device', type=int, default=0)
     parser.add_argument('--use_seed', action='store_true')
+
+    parser.add_argument('--use_gcn_conv', action='store_true')
 
     args = parser.parse_args()
     run_helper(args)
