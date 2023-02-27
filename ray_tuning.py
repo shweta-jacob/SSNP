@@ -34,12 +34,16 @@ class HyperParameterTuning:
 class ComGraphArguments:
     def __init__(self, dataset):
         self.model = 2
-        self.use_nodeid = False
+        if dataset in ["density", "component", "cut_ratio", "coreness"]:
+            self.use_nodeid = False
+            self.use_one = True
+        else:
+            self.use_nodeid = True
+            self.use_one = False
         self.repeat = 1
         self.use_seed = False
         self.dataset = dataset
         self.use_deg = False
-        self.use_one = True
         self.use_maxzeroone = False
         self.stochastic = True
         self.views = 1
