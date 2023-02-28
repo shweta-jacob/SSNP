@@ -23,10 +23,11 @@ python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset hpo_neuro --mo
 python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset em_user --model 2 --samples 0.75 --m 1 --M 5 --stochastic
 
 # ablation study with complement only
-python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset ppi_bp --model 1 --stochastic
-python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset hpo_metab --model 1 --stochastic
-python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset hpo_neuro --model 1 --stochastic
-python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset em_user --model 1 --stochastic
+# This can only be run on branch full-complement-model
+#python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset ppi_bp --model 1 --stochastic
+#python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset hpo_metab --model 1 --stochastic
+#python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset hpo_neuro --model 1 --stochastic
+#python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset em_user --model 1 --stochastic
 
 # ablation study with GCNConv
 python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset ppi_bp --model 2 --samples 1 --m 8 --M 1 --stochastic --diffusion --use_gcn_conv
