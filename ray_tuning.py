@@ -47,6 +47,7 @@ class ComGraphArguments:
         self.use_maxzeroone = False
         self.stochastic = True
         self.views = 1
+        self.use_gcn_conv = False
 
 
 def ray_tune_helper(identifier, output_path, dataset):
