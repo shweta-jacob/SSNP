@@ -328,25 +328,25 @@ def test(pool1="size",
         print(
             f"end: epoch {i}, train time {sum(trn_time):.2f} s, train {trn_score:.4f} val {val_score:.3f}, tst {tst_score:.3f}",
             flush=True)
-        outs.append(tst_score * 100)
+        outs.append(tst_score)
     print(f"Time for {args.dataset} dataset and model {args.model}")
-    print(f"Average run time: {np.average(run_times):.2f} ± {np.std(run_times):.2f}")
-    print(f"Average preprocessing time: {np.average(preproc_times):.2f} ± {np.std(preproc_times):.2f}")
-    print(f"Average train time: {np.average(trn_time):.2f} ± {np.std(trn_time):.3f}")
-    print(f"Average inference time: {np.average(inference_time):.2f} ± {np.std(inference_time):.2f}")
+    print(f"Average run time: {np.average(run_times):.3f} ± {np.std(run_times):.3f}")
+    print(f"Average preprocessing time: {np.average(preproc_times):.3f} ± {np.std(preproc_times):.3f}")
+    print(f"Average train time: {np.average(trn_time):.3f} ± {np.std(trn_time):.3f}")
+    print(f"Average inference time: {np.average(inference_time):.3f} ± {np.std(inference_time):.3f}")
     tst_average = np.average(outs)
     tst_error = np.std(outs) / np.sqrt(len(outs))
     print(
-        f"Test Accuracy {tst_average :.2f} ± {tst_error :.2f}"
+        f"Test Accuracy {tst_average :.3f} ± {tst_error :.3f}"
     )
     exp_results = {}
     exp_results[f"{args.dataset}_model{args.model}"] = {
         "results": {
-            "Test Accuracy": f"{tst_average:.2f} ± {tst_error:.2f}",
-            "Avg runtime": f"{np.average(run_times):.2f} ± {np.std(run_times):.2f}",
-            "Avg preprocessing time": f"{np.average(preproc_times):.2f} ± {np.std(preproc_times):.2f}",
-            "Avg train time": f"{np.average(trn_time):.2f} ± {np.std(trn_time):.3f}",
-            "Avg inference time": f"{np.average(inference_time):.2f} ± {np.std(inference_time):.2f}",
+            "Test Accuracy": f"{tst_average:.3f} ± {tst_error:.3f}",
+            "Avg runtime": f"{np.average(run_times):.3f} ± {np.std(run_times):.3f}",
+            "Avg preprocessing time": f"{np.average(preproc_times):.3f} ± {np.std(preproc_times):.3f}",
+            "Avg train time": f"{np.average(trn_time):.3f} ± {np.std(trn_time):.3f}",
+            "Avg inference time": f"{np.average(inference_time):.3f} ± {np.std(inference_time):.3f}",
         },
     }
     results_json = f"{args.dataset}_model{args.model}_results.json"
