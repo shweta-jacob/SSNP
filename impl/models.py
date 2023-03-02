@@ -369,10 +369,14 @@ class COMGraphMasterNet(nn.Module):
     Fork of GLASS but with (m, M, samples) driven sampling of inside and outside the subgraphs
     '''
 
-    def __init__(self, conv: COMGraphLayerNet, preds: nn.ModuleList,
-                 pools: nn.ModuleList, model_type, hidden_dim, conv_layer, samples, m, M, stochastic, diffusion):
+    def __init__(self, preds: nn.ModuleList,
+                 pools: nn.ModuleList, model_type, hidden_dim, samples, m, M, stochastic, max_deg):
         super().__init__()
-        self.conv = conv
+        self.input_emb = nn.Embedding(max_deg + 1,
+                                      hidden_dim,
+                                      scale_grad_by_freq=False)
+        self.mlp = torch_geometric.nn.MLP(channel_list=[hidden_dim, hidden_dim, hidden_dim],
+                                          act_first=True, act="ELU", dropout=[0.5, 0.5])
         self.preds = preds
         self.pools = pools
         self.model_type = model_type
@@ -380,22 +384,12 @@ class COMGraphMasterNet(nn.Module):
         self.m = m
         self.M = M
         self.stochastic = stochastic
-        self.diffusion = diffusion
-        if self.diffusion and self.model_type == 2:
-            self.mlp = torch_geometric.nn.MLP(channel_list=[hidden_dim * conv_layer * 2, hidden_dim * 2, hidden_dim],
-                                              act_first=True, act="ELU", dropout=[0.5, 0.5])
 
-    def NodeEmb(self, x, edge_index, edge_weight):
-        embs = []
-        for _ in range(x.shape[1]):
-            emb = self.conv(x[:, _, :].reshape(x.shape[0], x.shape[-1]),
-                            edge_index, edge_weight)
-            embs.append(emb.reshape(emb.shape[0], 1, emb.shape[-1]))
-        emb = torch.cat(embs, dim=1)
-        emb = torch.mean(emb, dim=1)
-        return emb
+    def NodeEmb(self, x):
+        x = self.input_emb(x).reshape(x.shape[0], -1)
+        return self.mlp(x)
 
-    def Pool(self, emb, subG_node, comp_node, pool, edge_index, device, row, col):
+    def Pool(self, emb, subG_node, comp_node, pool, device, row, col):
         if self.model_type == 0:
             batch, pos = pad2batch(subG_node)
             emb_subg = emb[pos]
@@ -456,14 +450,12 @@ class COMGraphMasterNet(nn.Module):
             emb_comp = pool[1](emb_comp, batch_comp)
 
             emb = torch.cat([emb_subg, emb_comp], dim=-1)
-            if self.diffusion:
-                emb = self.mlp(emb)
 
         return emb
 
     def forward(self, x, edge_index, edge_weight, subG_node, comp_node, row=None, col=None, z=None, device=None, id=0):
-        emb = self.NodeEmb(x, edge_index, edge_weight)
-        emb = self.Pool(emb, subG_node, comp_node, self.pools, edge_index, device, row, col)
+        emb = self.NodeEmb(x)
+        emb = self.Pool(emb, subG_node, comp_node, self.pools, device, row, col)
         return self.preds[id](emb)
 
 

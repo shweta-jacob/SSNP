@@ -121,38 +121,16 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
         z_ratio: see GLASSConv in impl/model.py. Z_ratio in [0.5, 1].
         aggr: aggregation method. mean, sum, or gcn.
     '''
-    conv = functools.partial(COMGraphConv, aggr=aggr, dropout=dropout)
-    if args.use_gcn_conv:
-        conv = functools.partial(GCNConv, add_self_loops=False)
-    conv = models.COMGraphLayerNet(hidden_dim,
-                                   hidden_dim,
-                                   conv_layer,
-                                   max_deg=max_deg,
-                                   activation=nn.ELU(inplace=True),
-                                   jk=jk,
-                                   dropout=dropout,
-                                   conv=conv,
-                                   gn=True)
-
-    # use pretrained node embeddings.
-    if args.use_nodeid:
-        print("load ", f"./Emb/{args.dataset}_{hidden_dim}.pt")
-        path_to_emb = f"Emb/{args.dataset}_{hidden_dim}.pt"
-        if hypertuning:
-            path_to_emb = os.path.join('/media/nvme/sjacob/extended-GLASS/', path_to_emb)
-        emb = torch.load(path_to_emb, map_location=torch.device('cpu')).detach()
-        conv.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
-
     num_rep = 1
     in_channels = hidden_dim * (1) * num_rep if jk else hidden_dim
     if args.model == 0:
-        in_channels = hidden_dim * (conv_layer) * num_rep if jk else hidden_dim
+        in_channels = hidden_dim * num_rep if jk else hidden_dim
     if args.model == 2 and not args.diffusion:
         # if MLP mixing is enabled, num_rep is 1 throughout, else it becomes 2
         num_rep = 2
-        in_channels = hidden_dim * (conv_layer) * num_rep if jk else hidden_dim
+        in_channels = hidden_dim * num_rep if jk else hidden_dim
 
-    mlp = MLP(channel_list=[in_channels, output_channels], dropout=[0], norm=None, act=None)
+    mlp = MLP(channel_list=[in_channels, hidden_dim, output_channels], dropout=[0, 0], norm=None, act=None)
     # mlp = nn.Linear(hidden_dim * (1) * num_rep if jk else hidden_dim,
     #                 output_channels)
 
@@ -172,10 +150,17 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
     else:
         raise NotImplementedError
 
-    gnn = models.COMGraphMasterNet(conv, torch.nn.ModuleList([mlp]), pooling_layers, args.model, hidden_dim, conv_layer,
-                                   args.samples, args.m, args.M, args.stochastic, args.diffusion).to(
+    gnn = models.COMGraphMasterNet(torch.nn.ModuleList([mlp]), pooling_layers, args.model, hidden_dim, args.samples, args.m, args.M, args.stochastic, max_deg=max_deg).to(
         config.device)
 
+    # use pretrained node embeddings.
+    if args.use_nodeid:
+        print("load ", f"./Emb/{args.dataset}_{hidden_dim}.pt")
+        path_to_emb = f"Emb/{args.dataset}_{hidden_dim}.pt"
+        if hypertuning:
+            path_to_emb = os.path.join('/media/nvme/sjacob/extended-GLASS/', path_to_emb)
+        emb = torch.load(path_to_emb, map_location=torch.device('cpu')).detach()
+        gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
     print("-" * 64)
     print("GNN Architecture is as follows ->")
     print(gnn)
@@ -263,7 +248,7 @@ def test(pool1="size",
             trn_time.append(time.time() - t1)
             scd.step(loss)
 
-            if i >= 100 / num_div:
+            if i >= 5:
                 score, _ = train.test(gnn,
                                       val_loader,
                                       score_fn,
