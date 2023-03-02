@@ -161,6 +161,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
             path_to_emb = os.path.join('/media/nvme/sjacob/extended-GLASS/', path_to_emb)
         emb = torch.load(path_to_emb, map_location=torch.device('cpu')).detach()
         gnn.input_emb = nn.Embedding.from_pretrained(emb, freeze=False)
+        gnn.input_emb.to(device=config.device)
     print("-" * 64)
     print("GNN Architecture is as follows ->")
     print(gnn)
