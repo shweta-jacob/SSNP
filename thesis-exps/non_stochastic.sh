@@ -1,8 +1,8 @@
-python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset ppi_bp --model 2 --samples 1 --m 8 --M 1 --views 1 --diffusion
-python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset ppi_bp --model 2 --samples 1 --m 8 --M 1 --views 2 --diffusion
-python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset ppi_bp --model 2 --samples 1 --m 8 --M 1 --views 4 --diffusion
-python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset ppi_bp --model 2 --samples 1 --m 8 --M 1 --views 6 --diffusion
-python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset ppi_bp --model 2 --samples 1 --m 8 --M 1 --views 8 --diffusion
+python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset ppi_bp --model 2 --samples 1 --m 8 --M 1 --views 1
+python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset ppi_bp --model 2 --samples 1 --m 8 --M 1 --views 2
+python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset ppi_bp --model 2 --samples 1 --m 8 --M 1 --views 4
+python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset ppi_bp --model 2 --samples 1 --m 8 --M 1 --views 6
+python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset ppi_bp --model 2 --samples 1 --m 8 --M 1 --views 8 
 
 python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset hpo_metab --model 2 --samples 1 --m 1 --M 1 --views 1
 python GLASSTest.py --use_nodeid --use_seed --repeat 10 --dataset hpo_metab --model 2 --samples 1 --m 1 --M 1 --views 2
