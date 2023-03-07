@@ -4,6 +4,7 @@ import json
 import os.path
 import random
 import time
+import scipy.sparse as ssp
 from pprint import pprint
 
 import numpy as np
@@ -65,24 +66,19 @@ def split(args, hypertuning=False):
         raise NotImplementedError
 
     max_deg = torch.max(baseG.x)
-    N = baseG.x.shape[0]
-    E = baseG.edge_index.size()[-1]
-    sparse_adj = SparseTensor(
-        row=baseG.edge_index[0], col=baseG.edge_index[1],
-        value=torch.arange(E, device="cpu"),
-        sparse_sizes=(N, N))
-    row, col, _ = sparse_adj.csr()
     baseG.to(config.device)
     # split data
     trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
     tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
-    trn_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, views=args.views,
-                                device=config.device, row=row, col=col, dataset=args.dataset)
-    val_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device,
-                                row=row, col=col, dataset=args.dataset)
-    tst_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device,
-                                row=row, col=col, dataset=args.dataset)
+    A = ssp.csr_matrix(
+        (trn_dataset.edge_attr.cpu().numpy(),
+         (trn_dataset.edge_index[0].cpu().numpy(), trn_dataset.edge_index[1].cpu().numpy())),
+        shape=(trn_dataset.x.shape[0], trn_dataset.x.shape[0])
+    )
+    trn_dataset.sample_pos_comp(num_hops=args.num_hops, A=A)
+    val_dataset.sample_pos_comp(num_hops=args.num_hops, A=A)
+    tst_dataset.sample_pos_comp(num_hops=args.num_hops, A=A)
 
     trn_dataset = trn_dataset.to(config.device)
     val_dataset = val_dataset.to(config.device)
@@ -173,7 +169,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
         raise NotImplementedError
 
     gnn = models.COMGraphMasterNet(conv, torch.nn.ModuleList([mlp]), pooling_layers, args.model, hidden_dim, conv_layer,
-                                   args.samples, args.m, args.M, args.stochastic, args.diffusion).to(
+                                   args.diffusion).to(
         config.device)
 
     print("-" * 64)
@@ -259,7 +255,7 @@ def test(pool1="size",
         for i in range(300):
             t1 = time.time()
             trn_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn, device=config.device,
-                                          row=row, col=col, run=repeat + 1, epoch=i)
+                                          run=repeat + 1, epoch=i)
             trn_time.append(time.time() - t1)
             scd.step(loss)
 
@@ -267,7 +263,7 @@ def test(pool1="size",
                 score, _ = train.test(gnn,
                                       val_loader,
                                       score_fn,
-                                      loss_fn=loss_fn, device=config.device, row=row, col=col, run=repeat + 1, epoch=i)
+                                      loss_fn=loss_fn, device=config.device, run=repeat + 1, epoch=i)
 
                 if score > val_score:
                     early_stop = 0
@@ -276,7 +272,7 @@ def test(pool1="size",
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
-                                          loss_fn=loss_fn, device=config.device, row=row, col=col, run=repeat + 1,
+                                          loss_fn=loss_fn, device=config.device, run=repeat + 1,
                                           epoch=i)
                     inf_end = time.time()
                     inference_time.append(inf_end - inf_start)
@@ -292,7 +288,7 @@ def test(pool1="size",
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
-                                          loss_fn=loss_fn, device=config.device, row=row, col=col, run=repeat + 1,
+                                          loss_fn=loss_fn, device=config.device, run=repeat + 1,
                                           epoch=i)
                     inf_end = time.time()
                     inference_time.append(inf_end - inf_start)
@@ -308,7 +304,7 @@ def test(pool1="size",
                     if i % 10 == 0:
                         inf_start = time.time()
                         test = train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn, device=config.device,
-                                          row=row, col=col, run=repeat + 1, epoch=i)
+                                          run=repeat + 1, epoch=i)
                         inf_end = time.time()
                         inference_time.append(inf_end - inf_start)
                         print(
@@ -440,12 +436,8 @@ if __name__ == '__main__':
     parser.add_argument('--model', type=int, default=0)
     # node label settings
     parser.add_argument('--use_maxzeroone', action='store_true')
-    parser.add_argument('--samples', type=float, default=0)
-    parser.add_argument('--m', type=int, default=0)
-    parser.add_argument('--M', type=int, default=0)
+    parser.add_argument('--num_hops', type=int, default=1)
     parser.add_argument('--diffusion', action='store_true')
-    parser.add_argument('--stochastic', action='store_true')
-    parser.add_argument('--views', type=int, default=1)
 
     parser.add_argument('--repeat', type=int, default=1)
     parser.add_argument('--device', type=int, default=0)

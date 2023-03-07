@@ -370,16 +370,12 @@ class COMGraphMasterNet(nn.Module):
     '''
 
     def __init__(self, conv: COMGraphLayerNet, preds: nn.ModuleList,
-                 pools: nn.ModuleList, model_type, hidden_dim, conv_layer, samples, m, M, stochastic, diffusion):
+                 pools: nn.ModuleList, model_type, hidden_dim, conv_layer, diffusion):
         super().__init__()
         self.conv = conv
         self.preds = preds
         self.pools = pools
         self.model_type = model_type
-        self.samples = samples
-        self.m = m
-        self.M = M
-        self.stochastic = stochastic
         self.diffusion = diffusion
         if self.diffusion and self.model_type == 2:
             self.mlp = torch_geometric.nn.MLP(channel_list=[hidden_dim * conv_layer * 2, hidden_dim * 2, hidden_dim],
@@ -395,7 +391,7 @@ class COMGraphMasterNet(nn.Module):
         emb = torch.mean(emb, dim=1)
         return emb
 
-    def Pool(self, emb, subG_node, comp_node, pool, edge_index, device, row, col):
+    def Pool(self, emb, subG_node, comp_node, pool):
         if self.model_type == 0:
             batch, pos = pad2batch(subG_node)
             emb_subg = emb[pos]
@@ -406,47 +402,6 @@ class COMGraphMasterNet(nn.Module):
             emb_comp = emb[pos_comp]
             emb = pool[1](emb_comp, batch_comp)
         else:
-            # sub + compl pooling
-            # from torch_geometric.data import Data
-            # from torch_geometric.utils import to_networkx
-            #
-            # data = Data(edge_index=edge_index)
-            # G = to_networkx(data, to_undirected=True)
-            # row = torch.tensor(list(map(lambda x: x[0], G.edges())))
-            # col = torch.tensor(list(map(lambda x: x[1], G.edges())))
-            # row, col = edge_index[0].to(device), edge_index[1].to(device)
-            if self.stochastic:
-                batch_comp_nodes = []
-                subgraph_nodes_list = []
-                for graph_nodes in subG_node:
-                    updated_graph_nodes = graph_nodes[graph_nodes != -1].tolist()
-                    if self.samples:
-                        updated_graph_node_list = updated_graph_nodes
-                        if len(updated_graph_node_list) < math.ceil(self.samples * len(updated_graph_node_list)):
-                            samples_required = len(updated_graph_node_list)
-                        else:
-                            samples_required = math.ceil(self.samples * len(updated_graph_node_list))
-                        starting_for_rw = random.sample(updated_graph_node_list, k=samples_required)
-                    else:
-                        starting_for_rw = updated_graph_nodes
-                    starting_nodes = torch.tensor(starting_for_rw, dtype=torch.long)
-                    start = starting_nodes.repeat(self.M).to(device)
-                    node_ids = torch.ops.torch_cluster.random_walk(row, col, start, self.m, 1, 1)[0]
-                    rw_nodes = torch.unique(node_ids.flatten()).tolist()
-                    subgraph_nodes = set(updated_graph_nodes).intersection(set(rw_nodes))
-                    complement_nodes = set(rw_nodes).difference(subgraph_nodes)
-
-                    batch_comp_nodes.append(torch.Tensor(list(complement_nodes)))
-                    subgraph_nodes_list.append(torch.Tensor(list(subgraph_nodes)))
-
-                complement = pad_sequence(batch_comp_nodes, batch_first=True, padding_value=-1).to(torch.int64)
-                complement = complement.to(device)
-                comp_node = complement
-
-                subgraph = pad_sequence(subgraph_nodes_list, batch_first=True, padding_value=-1).to(torch.int64)
-                subgraph = subgraph.to(device)
-                subG_node = subgraph
-
             batch, pos = pad2batch(subG_node)
             emb_subg = emb[pos]
             emb_subg = pool[0](emb_subg, batch)
@@ -461,9 +416,9 @@ class COMGraphMasterNet(nn.Module):
 
         return emb
 
-    def forward(self, x, edge_index, edge_weight, subG_node, comp_node, row=None, col=None, z=None, device=None, id=0):
+    def forward(self, x, edge_index, edge_weight, subG_node, comp_node, z=None, device=None, id=0):
         emb = self.NodeEmb(x, edge_index, edge_weight)
-        emb = self.Pool(emb, subG_node, comp_node, self.pools, edge_index, device, row, col)
+        emb = self.Pool(emb, subG_node, comp_node, self.pools)
         return self.preds[id](emb)
 
 

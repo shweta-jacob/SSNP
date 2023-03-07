@@ -38,46 +38,46 @@ class GDataset:
     def __getitem__(self, idx):
         return self.pos[idx], self.y[idx]
 
-    def sample_pos_comp(self, samples, m, M, stoch, views=1, device=0, row=None, col=None, dataset="ppi_bp"):
-        if not stoch:
-            print("Setting up non-stochastic data")
-            row = row.to(device)
-            col = col.to(device)
-            y = []
-            batch_comp_nodes = []
-            subgraph_nodes_list = []
-            for idx, graph_nodes in enumerate(self.pos):
-                y_val = self.y[idx]
-                updated_graph_nodes = graph_nodes[graph_nodes != -1].tolist()
-                for i in range(views):
-                    if samples:
-                        updated_graph_node_list = updated_graph_nodes
-                        if len(updated_graph_node_list) < math.ceil(samples * len(updated_graph_node_list)):
-                            samples_required = len(updated_graph_node_list)
-                        else:
-                            samples_required = math.ceil(samples * len(updated_graph_node_list))
-                        starting_for_rw = random.sample(updated_graph_node_list, k=samples_required)
-                    else:
-                        starting_for_rw = updated_graph_nodes
-                    starting_nodes = torch.tensor(starting_for_rw, dtype=torch.long)
-                    start = starting_nodes.repeat(M).to(device)
-                    node_ids = torch.ops.torch_cluster.random_walk(row, col, start, m, 1, 1)[0]
-                    rw_nodes = torch.unique(node_ids.flatten()).tolist()
-                    subgraph_nodes = set(updated_graph_nodes).intersection(set(rw_nodes))
-                    complement_nodes = set(rw_nodes).difference(subgraph_nodes)
+    def neighbors(self, fringe, A, outgoing=True):
+        # Find all 1-hop neighbors of nodes in fringe from graph A,
+        # where A is a scipy csr adjacency matrix.
+        # If outgoing=True, find neighbors with outgoing edges;
+        # otherwise, find neighbors with incoming edges (you should
+        # provide a csc matrix in this case).
+        if outgoing:
+            res = set(A[list(fringe)].indices)
+        else:
+            res = set(A[:, list(fringe)].indices)
 
-                    batch_comp_nodes.append(torch.Tensor(list(complement_nodes)))
-                    subgraph_nodes_list.append(torch.Tensor(list(subgraph_nodes)))
-                    y.append(y_val)
+        return res
 
-            self.pos = pad_sequence(subgraph_nodes_list, batch_first=True, padding_value=-1).to(torch.int64)
-            self.comp = pad_sequence(batch_comp_nodes, batch_first=True, padding_value=-1).to(torch.int64)
-            if dataset == "hpo_neuro":
-                self.y = torch.vstack(y)
-            elif dataset == "em_user":
-                self.y = torch.Tensor(y)
-            else:
-                self.y = torch.Tensor(y).to(torch.int64)
+    def sample_pos_comp(self, num_hops, A=None):
+        print("Setting up non-stochastic data")
+        batch_comp_nodes = []
+        samples = 1.0
+        max_nodes_per_hop = None
+        for idx, graph_nodes in enumerate(self.pos):
+            center = graph_nodes[graph_nodes != -1].tolist()
+            nodes = center
+            visited = set(center)
+            fringe = set(center)
+            for dist in range(1, num_hops + 1):
+                fringe = self.neighbors(fringe, A)
+                fringe = fringe - visited
+                visited = visited.union(fringe)
+                if samples < 1.0:
+                    fringe = random.sample(fringe, int(samples * len(fringe)))
+                if max_nodes_per_hop is not None:
+                    if max_nodes_per_hop < len(fringe):
+                        fringe = random.sample(fringe, max_nodes_per_hop)
+                if len(fringe) == 0:
+                    break
+                nodes = nodes + list(fringe)
+
+                complement_nodes = set(nodes).difference(center)
+                batch_comp_nodes.append(torch.Tensor(list(complement_nodes)))
+
+        self.comp = pad_sequence(batch_comp_nodes, batch_first=True, padding_value=-1).to(torch.int64)
 
     def to(self, device):
         self.x = self.x.to(device)
