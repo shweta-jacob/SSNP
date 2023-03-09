@@ -377,7 +377,7 @@ class COMGraphMasterNet(nn.Module):
                                       hidden_dim,
                                       scale_grad_by_freq=False)
         self.mlp = torch_geometric.nn.MLP(channel_list=[hidden_dim, hidden_dim],
-                                          act_first=True, act="ELU", dropout=[0.5])
+                                          act_first=True, act="ELU", dropout=[0.5], plain_last=False)
         self.preds = preds
         self.pools = pools
         self.model_type = model_type
