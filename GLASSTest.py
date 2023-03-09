@@ -242,14 +242,14 @@ def test(pool1="size",
         tst_score = 0
         early_stop = 0
         print(f"Warm up for {100 / num_div} steps in progress...")
-        for i in range(300):
+        for i in range(50):
             t1 = time.time()
             trn_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn, device=config.device,
                                           row=row, col=col, run=repeat + 1, epoch=i)
             trn_time.append(time.time() - t1)
             scd.step(loss)
 
-            if i >= 5:
+            if i >= 0:
                 score, _ = train.test(gnn,
                                       val_loader,
                                       score_fn,
@@ -304,9 +304,9 @@ def test(pool1="size",
                             f"Best picked so far- val: {val_score:.4f} tst: {tst_score:.4f}, early stop: {early_stop} \n")
             if val_score >= 1 - 1e-5:
                 early_stop += 1
-            if early_stop > (100 / num_div):
-                print("Patience exhausted. Early stopping.")
-                break
+            # if early_stop > (100 / num_div):
+            #     print("Patience exhausted. Early stopping.")
+            #     break
         end_time = time.time()
         run_time = end_time - start_time
         run_times.append(run_time)
