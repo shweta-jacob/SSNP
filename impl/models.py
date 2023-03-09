@@ -8,6 +8,7 @@ import torch_geometric
 from torch.nn.utils.rnn import pad_sequence
 from torch_geometric.nn import GCNConv, global_max_pool, global_mean_pool, global_add_pool
 from torch_geometric.nn.norm import GraphNorm, GraphSizeNorm
+from torch_geometric.utils import to_dense_adj
 from torch_sparse import SparseTensor
 
 from .utils import pad2batch
@@ -385,8 +386,11 @@ class COMGraphMasterNet(nn.Module):
         self.M = M
         self.stochastic = stochastic
 
-    def NodeEmb(self, x):
+    def NodeEmb(self, x, edge_index):
         x = self.input_emb(x).reshape(x.shape[0], -1)
+
+        adj = to_dense_adj(edge_index, max_num_nodes=x.shape[0]).reshape(x.shape[0], -1)
+        x = adj @ x
         return self.mlp(x)
 
     def Pool(self, emb, subG_node, comp_node, pool, device, row, col):
@@ -454,7 +458,7 @@ class COMGraphMasterNet(nn.Module):
         return emb
 
     def forward(self, x, edge_index, edge_weight, subG_node, comp_node, row=None, col=None, z=None, device=None, id=0):
-        emb = self.NodeEmb(x)
+        emb = self.NodeEmb(x, edge_index)
         emb = self.Pool(emb, subG_node, comp_node, self.pools, device, row, col)
         return self.preds[id](emb)
 
