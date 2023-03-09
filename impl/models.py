@@ -376,8 +376,8 @@ class COMGraphMasterNet(nn.Module):
         self.input_emb = nn.Embedding(max_deg + 1,
                                       hidden_dim,
                                       scale_grad_by_freq=False)
-        self.mlp = torch_geometric.nn.MLP(channel_list=[hidden_dim, hidden_dim, hidden_dim],
-                                          act_first=True, act="ELU", dropout=[0.5, 0.5])
+        self.mlp = torch_geometric.nn.MLP(channel_list=[hidden_dim, hidden_dim],
+                                          act_first=True, act="ELU", dropout=[0.5])
         self.preds = preds
         self.pools = pools
         self.model_type = model_type
@@ -386,11 +386,8 @@ class COMGraphMasterNet(nn.Module):
         self.M = M
         self.stochastic = stochastic
 
-    def NodeEmb(self, x, edge_index):
+    def NodeEmb(self, x):
         x = self.input_emb(x).reshape(x.shape[0], -1)
-
-        adj = to_dense_adj(edge_index, max_num_nodes=x.shape[0]).reshape(x.shape[0], -1)
-        x = adj @ x
         return self.mlp(x)
 
     def Pool(self, emb, subG_node, comp_node, pool, device, row, col):
@@ -458,7 +455,7 @@ class COMGraphMasterNet(nn.Module):
         return emb
 
     def forward(self, x, edge_index, edge_weight, subG_node, comp_node, row=None, col=None, z=None, device=None, id=0):
-        emb = self.NodeEmb(x, edge_index)
+        emb = self.NodeEmb(x)
         emb = self.Pool(emb, subG_node, comp_node, self.pools, device, row, col)
         return self.preds[id](emb)
 

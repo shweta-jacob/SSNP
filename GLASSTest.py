@@ -130,7 +130,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
         num_rep = 2
         in_channels = hidden_dim * num_rep if jk else hidden_dim
 
-    mlp = MLP(channel_list=[in_channels, hidden_dim, output_channels], dropout=[0, 0], norm=None, act=None)
+    mlp = MLP(channel_list=[in_channels, output_channels], dropout=[0], norm=None, act=None)
     # mlp = nn.Linear(hidden_dim * (1) * num_rep if jk else hidden_dim,
     #                 output_channels)
 
