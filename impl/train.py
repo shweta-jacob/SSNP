@@ -19,7 +19,6 @@ def train(optimizer, model, dataloader, metrics, loss_fn, device, row, col, run,
     total_loss = []
     ys = []
     preds = []
-    set_seed(epoch + run * 1000)
     row = row.to(device)
     col = col.to(device)
     for batch in dataloader:
@@ -44,7 +43,6 @@ def test(model, dataloader, metrics, loss_fn, device, row, col, run, epoch):
     model.eval()
     preds = []
     ys = []
-    set_seed(epoch + run * 1000)
     row = row.to(device)
     col = col.to(device)
     for batch in dataloader:

@@ -6,12 +6,14 @@ import torch
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader
 
+
 def set_seed(seed: int):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)  # multi gpu
+
 
 class GDataset:
     '''
@@ -38,46 +40,36 @@ class GDataset:
     def __getitem__(self, idx):
         return self.pos[idx], self.y[idx]
 
-    def sample_pos_comp(self, samples, m, M, stoch, views=1, device=0, row=None, col=None, dataset="ppi_bp"):
-        if not stoch:
-            print("Setting up non-stochastic data")
-            row = row.to(device)
-            col = col.to(device)
-            y = []
-            batch_comp_nodes = []
-            subgraph_nodes_list = []
-            for idx, graph_nodes in enumerate(self.pos):
-                y_val = self.y[idx]
-                updated_graph_nodes = graph_nodes[graph_nodes != -1].tolist()
-                for i in range(views):
-                    if samples:
-                        updated_graph_node_list = updated_graph_nodes
-                        if len(updated_graph_node_list) < math.ceil(samples * len(updated_graph_node_list)):
-                            samples_required = len(updated_graph_node_list)
-                        else:
-                            samples_required = math.ceil(samples * len(updated_graph_node_list))
-                        starting_for_rw = random.sample(updated_graph_node_list, k=samples_required)
-                    else:
-                        starting_for_rw = updated_graph_nodes
-                    starting_nodes = torch.tensor(starting_for_rw, dtype=torch.long)
-                    start = starting_nodes.repeat(M).to(device)
-                    node_ids = torch.ops.torch_cluster.random_walk(row, col, start, m, 1, 1)[0]
-                    rw_nodes = torch.unique(node_ids.flatten()).tolist()
-                    subgraph_nodes = set(updated_graph_nodes).intersection(set(rw_nodes))
-                    complement_nodes = set(rw_nodes).difference(subgraph_nodes)
+    def sample_pos_comp(self, m, M, views=1, device=0, row=None, col=None, dataset="ppi_bp"):
+        print("Setting up non-stochastic data")
+        row = row.to(device)
+        col = col.to(device)
+        y = []
+        batch_comp_nodes = []
+        subgraph_nodes_list = []
+        for idx, graph_nodes in enumerate(self.pos):
+            y_val = self.y[idx]
+            starting_for_rw = graph_nodes[graph_nodes != -1].tolist()
+            for i in range(views):
+                starting_nodes = torch.tensor(starting_for_rw, dtype=torch.long)
+                start = starting_nodes.repeat(M).to(device)
+                node_ids = torch.ops.torch_cluster.random_walk(row, col, start, m, 1, 1)[0]
+                rw_nodes = torch.unique(node_ids.flatten()).tolist()
+                subgraph_nodes = set(starting_for_rw).intersection(set(rw_nodes))
+                complement_nodes = set(rw_nodes).difference(subgraph_nodes)
 
-                    batch_comp_nodes.append(torch.Tensor(list(complement_nodes)))
-                    subgraph_nodes_list.append(torch.Tensor(list(subgraph_nodes)))
-                    y.append(y_val)
+                batch_comp_nodes.append(torch.Tensor(list(complement_nodes)))
+                subgraph_nodes_list.append(graph_nodes)
+                y.append(y_val)
 
-            self.pos = pad_sequence(subgraph_nodes_list, batch_first=True, padding_value=-1).to(torch.int64)
-            self.comp = pad_sequence(batch_comp_nodes, batch_first=True, padding_value=-1).to(torch.int64)
-            if dataset == "hpo_neuro":
-                self.y = torch.vstack(y)
-            elif dataset == "em_user":
-                self.y = torch.Tensor(y)
-            else:
-                self.y = torch.Tensor(y).to(torch.int64)
+        self.pos = torch.stack(subgraph_nodes_list, dim=0)
+        self.comp = pad_sequence(batch_comp_nodes, batch_first=True, padding_value=-1).to(torch.int64)
+        if dataset == "hpo_neuro":
+            self.y = torch.vstack(y)
+        elif dataset == "em_user":
+            self.y = torch.Tensor(y)
+        else:
+            self.y = torch.Tensor(y).to(torch.int64)
 
     def to(self, device):
         self.x = self.x.to(device)
