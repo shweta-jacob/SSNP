@@ -81,17 +81,17 @@ def split(args, hypertuning=False):
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
     tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
     trn_dataset1.sample_pos_comp(m=args.m, M=args.M, views=args.views,
-                                 device=config.device, row=row, col=col)
+                                 device=config.device, row=row, col=col, dataset=args.dataset)
     trn_dataset2.sample_pos_comp(m=args.m, M=args.M, views=args.views,
-                                 device=config.device, row=row, col=col)
+                                 device=config.device, row=row, col=col, dataset=args.dataset)
     trn_dataset3.sample_pos_comp(m=args.m, M=args.M, views=args.views,
-                                 device=config.device, row=row, col=col)
+                                 device=config.device, row=row, col=col, dataset=args.dataset)
     trn_dataset4.sample_pos_comp(m=args.m, M=args.M, views=args.views,
-                                 device=config.device, row=row, col=col)
+                                 device=config.device, row=row, col=col, dataset=args.dataset)
     val_dataset.sample_pos_comp(m=args.m, M=args.M, device=config.device,
-                                row=row, col=col)
+                                row=row, col=col, dataset=args.dataset)
     tst_dataset.sample_pos_comp(m=args.m, M=args.M, device=config.device,
-                                row=row, col=col)
+                                row=row, col=col, dataset=args.dataset)
 
     trn_dataset1 = trn_dataset1.to(config.device)
     trn_dataset2 = trn_dataset2.to(config.device)
