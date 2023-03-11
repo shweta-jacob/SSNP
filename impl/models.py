@@ -370,16 +370,12 @@ class COMGraphMasterNet(nn.Module):
     '''
 
     def __init__(self, conv: COMGraphLayerNet, preds: nn.ModuleList,
-                 pools: nn.ModuleList, model_type, hidden_dim, conv_layer, samples, m, M, stochastic, diffusion):
+                 pools: nn.ModuleList, model_type, hidden_dim, conv_layer, diffusion):
         super().__init__()
         self.conv = conv
         self.preds = preds
         self.pools = pools
         self.model_type = model_type
-        self.samples = samples
-        self.m = m
-        self.M = M
-        self.stochastic = stochastic
         self.diffusion = diffusion
         if self.diffusion and self.model_type == 2:
             self.mlp = torch_geometric.nn.MLP(channel_list=[hidden_dim * conv_layer * 2, hidden_dim * 2, hidden_dim],

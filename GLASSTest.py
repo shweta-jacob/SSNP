@@ -81,13 +81,13 @@ def split(args, hypertuning=False):
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
     tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
     trn_dataset1.sample_pos_comp(m=args.m, M=args.M, views=args.views,
-                                device=config.device, row=row, col=col)
+                                 device=config.device, row=row, col=col)
     trn_dataset2.sample_pos_comp(m=args.m, M=args.M, views=args.views,
-                                device=config.device, row=row, col=col)
+                                 device=config.device, row=row, col=col)
     trn_dataset3.sample_pos_comp(m=args.m, M=args.M, views=args.views,
-                                device=config.device, row=row, col=col)
+                                 device=config.device, row=row, col=col)
     trn_dataset4.sample_pos_comp(m=args.m, M=args.M, views=args.views,
-                                device=config.device, row=row, col=col)
+                                 device=config.device, row=row, col=col)
     val_dataset.sample_pos_comp(m=args.m, M=args.M, device=config.device,
                                 row=row, col=col)
     tst_dataset.sample_pos_comp(m=args.m, M=args.M, device=config.device,
@@ -185,8 +185,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
         raise NotImplementedError
 
     gnn = models.COMGraphMasterNet(conv, torch.nn.ModuleList([mlp]), pooling_layers, args.model, hidden_dim, conv_layer,
-                                   args.samples, args.m, args.M, args.stochastic, args.diffusion).to(
-        config.device)
+                                   args.diffusion).to(config.device)
 
     print("-" * 64)
     print("GNN Architecture is as follows ->")
