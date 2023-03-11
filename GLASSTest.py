@@ -456,11 +456,9 @@ if __name__ == '__main__':
     parser.add_argument('--model', type=int, default=0)
     # node label settings
     parser.add_argument('--use_maxzeroone', action='store_true')
-    parser.add_argument('--samples', type=float, default=0)
     parser.add_argument('--m', type=int, default=0)
     parser.add_argument('--M', type=int, default=0)
     parser.add_argument('--diffusion', action='store_true')
-    parser.add_argument('--stochastic', action='store_true')
     parser.add_argument('--views', type=int, default=1)
 
     parser.add_argument('--repeat', type=int, default=1)
