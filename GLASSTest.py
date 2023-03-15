@@ -46,7 +46,7 @@ def split(args, hypertuning=False):
     load and split dataset.
     '''
     # initialize and split dataset
-    global trn_dataset, val_dataset, tst_dataset, baseG
+    global trn_dataset1, trn_dataset2, trn_dataset3, trn_dataset4, val_dataset, tst_dataset, baseG
     global max_deg, output_channels, loader_fn, tloader_fn
     global row, col
     baseG = datasets.load_dataset(args.dataset, hypertuning)
@@ -74,17 +74,29 @@ def split(args, hypertuning=False):
     row, col, _ = sparse_adj.csr()
     baseG.to(config.device)
     # split data
-    trn_dataset = SubGDataset.GDataset(*baseG.get_split("train"))
+    trn_dataset1 = SubGDataset.GDataset(*baseG.get_split("train"))
+    trn_dataset2 = SubGDataset.GDataset(*baseG.get_split("train"))
+    trn_dataset3 = SubGDataset.GDataset(*baseG.get_split("train"))
+    trn_dataset4 = SubGDataset.GDataset(*baseG.get_split("train"))
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
     tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
-    trn_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, views=args.views,
-                                device=config.device, row=row, col=col, dataset=args.dataset)
-    val_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device,
+    trn_dataset1.sample_pos_comp(m=args.m, M=args.M, views=args.views,
+                                 device=config.device, row=row, col=col, dataset=args.dataset)
+    trn_dataset2.sample_pos_comp(m=args.m, M=args.M, views=args.views,
+                                 device=config.device, row=row, col=col, dataset=args.dataset)
+    trn_dataset3.sample_pos_comp(m=args.m, M=args.M, views=args.views,
+                                 device=config.device, row=row, col=col, dataset=args.dataset)
+    trn_dataset4.sample_pos_comp(m=args.m, M=args.M, views=args.views,
+                                 device=config.device, row=row, col=col, dataset=args.dataset)
+    val_dataset.sample_pos_comp(m=args.m, M=args.M, device=config.device,
                                 row=row, col=col, dataset=args.dataset)
-    tst_dataset.sample_pos_comp(samples=args.samples, m=args.m, M=args.M, stoch=args.stochastic, device=config.device,
+    tst_dataset.sample_pos_comp(m=args.m, M=args.M, device=config.device,
                                 row=row, col=col, dataset=args.dataset)
 
-    trn_dataset = trn_dataset.to(config.device)
+    trn_dataset1 = trn_dataset1.to(config.device)
+    trn_dataset2 = trn_dataset2.to(config.device)
+    trn_dataset3 = trn_dataset3.to(config.device)
+    trn_dataset4 = trn_dataset4.to(config.device)
     val_dataset = val_dataset.to(config.device)
     tst_dataset = tst_dataset.to(config.device)
     # choice of dataloader
@@ -150,8 +162,8 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
     else:
         raise NotImplementedError
 
-    gnn = models.COMGraphMasterNet(torch.nn.ModuleList([mlp]), pooling_layers, args.model, hidden_dim, args.samples, args.m, args.M, args.stochastic, max_deg=max_deg).to(
-        config.device)
+    gnn = models.COMGraphMasterNet(preds=torch.nn.ModuleList([mlp]), pools=pooling_layers, model_type=args.model,
+                                   hidden_dim=hidden_dim, max_deg=max_deg, diffusion=args.diffusion).to(config.device)
 
     # use pretrained node embeddings.
     if args.use_nodeid:
@@ -228,7 +240,10 @@ def test(pool1="size",
         print("-" * 64)
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio,
                          aggr, args, hypertuning)
-        trn_loader = loader_fn(trn_dataset, batch_size, repeat + 1)
+        trn_loader1 = loader_fn(trn_dataset1, batch_size, repeat + 1)
+        trn_loader2 = loader_fn(trn_dataset2, batch_size, repeat + 1)
+        trn_loader3 = loader_fn(trn_dataset3, batch_size, repeat + 1)
+        trn_loader4 = loader_fn(trn_dataset4, batch_size, repeat + 1)
         val_loader = tloader_fn(val_dataset, batch_size, repeat + 1)
         tst_loader = tloader_fn(tst_dataset, batch_size, repeat + 1)
         end_pre = time.time()
@@ -243,10 +258,10 @@ def test(pool1="size",
         tst_score = 0
         early_stop = 0
         print(f"Warm up for {100 / num_div} steps in progress...")
-        for i in range(50):
+        for i in range(100):
             t1 = time.time()
-            trn_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn, device=config.device,
-                                          row=row, col=col, run=repeat + 1, epoch=i)
+            trn_loader = random.choice([trn_loader1, trn_loader2, trn_loader3, trn_loader4])
+            trn_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn, device=config.device)
             trn_time.append(time.time() - t1)
             scd.step(loss)
 
@@ -254,7 +269,7 @@ def test(pool1="size",
                 score, _ = train.test(gnn,
                                       val_loader,
                                       score_fn,
-                                      loss_fn=loss_fn, device=config.device, row=row, col=col, run=repeat + 1, epoch=i)
+                                      loss_fn=loss_fn, device=config.device)
 
                 if score > val_score:
                     early_stop = 0
@@ -263,8 +278,7 @@ def test(pool1="size",
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
-                                          loss_fn=loss_fn, device=config.device, row=row, col=col, run=repeat + 1,
-                                          epoch=i)
+                                          loss_fn=loss_fn, device=config.device)
                     inf_end = time.time()
                     inference_time.append(inf_end - inf_start)
                     tst_score = score
@@ -279,8 +293,7 @@ def test(pool1="size",
                     score, _ = train.test(gnn,
                                           tst_loader,
                                           score_fn,
-                                          loss_fn=loss_fn, device=config.device, row=row, col=col, run=repeat + 1,
-                                          epoch=i)
+                                          loss_fn=loss_fn, device=config.device)
                     inf_end = time.time()
                     inference_time.append(inf_end - inf_start)
                     tst_score = max(score, tst_score)
@@ -294,8 +307,7 @@ def test(pool1="size",
                     early_stop += 1
                     if i % 10 == 0:
                         inf_start = time.time()
-                        test = train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn, device=config.device,
-                                          row=row, col=col, run=repeat + 1, epoch=i)
+                        test = train.test(gnn, tst_loader, score_fn, loss_fn=loss_fn, device=config.device)
                         inf_end = time.time()
                         inference_time.append(inf_end - inf_start)
                         print(
@@ -305,7 +317,7 @@ def test(pool1="size",
                             f"Best picked so far- val: {val_score:.4f} tst: {tst_score:.4f}, early stop: {early_stop} \n")
             if val_score >= 1 - 1e-5:
                 early_stop += 1
-            # if early_stop > (100 / num_div):
+            # if early_stop > 10:
             #     print("Patience exhausted. Early stopping.")
             #     break
         end_time = time.time()
@@ -437,7 +449,6 @@ if __name__ == '__main__':
     parser.add_argument('--m', type=int, default=0)
     parser.add_argument('--M', type=int, default=0)
     parser.add_argument('--diffusion', action='store_true')
-    parser.add_argument('--stochastic', action='store_true')
     parser.add_argument('--views', type=int, default=1)
 
     parser.add_argument('--repeat', type=int, default=1)
