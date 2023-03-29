@@ -137,7 +137,7 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
     if args.use_gcn_conv:
         conv = functools.partial(GCNConv, add_self_loops=False)
     if args.use_gat_conv:
-        conv = functools.partial(GATConv, add_self_loops=False, heads=3, bias=True, dropout=dropout, concat=False)
+        conv = functools.partial(GATConv, add_self_loops=False, heads=1, bias=True, dropout=.0, concat=False)
     conv = models.COMGraphLayerNet(hidden_dim,
                                    hidden_dim,
                                    conv_layer,
