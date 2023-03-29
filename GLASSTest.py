@@ -13,7 +13,7 @@ import yaml
 from ray import tune
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 from torch.optim import Adam, lr_scheduler
-from torch_geometric.nn import MLP, GCNConv
+from torch_geometric.nn import MLP, GCNConv, GATConv
 from torch_sparse import SparseTensor
 
 import datasets
@@ -136,6 +136,8 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
     conv = functools.partial(COMGraphConv, aggr=aggr, dropout=dropout)
     if args.use_gcn_conv:
         conv = functools.partial(GCNConv, add_self_loops=False)
+    if args.use_gat_conv:
+        conv = functools.partial(GATConv, add_self_loops=False, heads=3, bias=True, dropout=dropout, concat=False)
     conv = models.COMGraphLayerNet(hidden_dim,
                                    hidden_dim,
                                    conv_layer,
@@ -473,6 +475,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_seed', action='store_true')
 
     parser.add_argument('--use_gcn_conv', action='store_true')
+    parser.add_argument('--use_gat_conv', action='store_true')
 
     args = parser.parse_args()
     run_helper(args)
