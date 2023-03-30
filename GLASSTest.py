@@ -381,6 +381,9 @@ def test(pool1="size",
         results_json = f"{args.dataset}_model{args.model}_m_{args.m}_M_{args.M}_results.json"
         if args.diffusion:
             results_json = f"{args.dataset}_model{args.model}_m_{args.m}_M_{args.M}_with_diff_results.json"
+        if any([args.use_sage_conv, args.use_gat_conv, args.use_gcn_conv]):
+            sage_gat_gcn = f"sage_{args.use_sage_conv}_gat_{args.use_gat_conv}_gcn_{args.use_gcn_conv}"
+            results_json = f"{args.dataset}_model{args.model}_m_{args.m}_M_{args.M}_with_diff_{sage_gat_gcn}_results.json"
     with open(results_json, 'w') as output_file:
         json.dump(exp_results, output_file)
 
