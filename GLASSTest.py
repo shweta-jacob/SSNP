@@ -77,28 +77,16 @@ def split(args, hypertuning=False):
     baseG.to(config.device)
     # split data
     trn_dataset1 = SubGDataset.GDataset(*baseG.get_split("train"))
-    # trn_dataset2 = SubGDataset.GDataset(*baseG.get_split("train"))
-    # trn_dataset3 = SubGDataset.GDataset(*baseG.get_split("train"))
-    # trn_dataset4 = SubGDataset.GDataset(*baseG.get_split("train"))
     val_dataset = SubGDataset.GDataset(*baseG.get_split("valid"))
     tst_dataset = SubGDataset.GDataset(*baseG.get_split("test"))
-    trn_dataset1.sample_pos_comp_train(m=args.m, M=args.M, nv=args.views,
+    trn_dataset1.sample_pos_comp_train(m=args.m, M=args.M, nv=args.nv,
                                  device=config.device, row=row, col=col, dataset=args.dataset)
-    # trn_dataset2.sample_pos_comp(m=args.m, M=args.M, views=args.views,
-    #                              device=config.device, row=row, col=col, dataset=args.dataset)
-    # trn_dataset3.sample_pos_comp(m=args.m, M=args.M, views=args.views,
-    #                              device=config.device, row=row, col=col, dataset=args.dataset)
-    # trn_dataset4.sample_pos_comp(m=args.m, M=args.M, views=args.views,
-    #                              device=config.device, row=row, col=col, dataset=args.dataset)
     val_dataset.sample_pos_comp_test(m=args.m, M=args.M, device=config.device,
                                 row=row, col=col, dataset=args.dataset)
     tst_dataset.sample_pos_comp_test(m=args.m, M=args.M, device=config.device,
                                 row=row, col=col, dataset=args.dataset)
 
     trn_dataset1 = trn_dataset1.to(config.device)
-    # trn_dataset2 = trn_dataset2.to(config.device)
-    # trn_dataset3 = trn_dataset3.to(config.device)
-    # trn_dataset4 = trn_dataset4.to(config.device)
     val_dataset = val_dataset.to(config.device)
     tst_dataset = tst_dataset.to(config.device)
     # choice of dataloader
@@ -257,78 +245,11 @@ def test(pool1="size",
         early_stop = {"ppi_bp": 100 / num_div, "hpo_metab": 50, "hpo_neuro": 50, "em_user": 10}
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio,
                          aggr, args, hypertuning)
-        nve = 5
-        trn_dataset = trn_dataset1
-        selected_views = random.sample(range(0, args.views), nve)
-        selected_pos = [trn_dataset1.pos_temp[i] for i in selected_views]
-        selected_comp = [trn_dataset1.comp_temp[i] for i in selected_views]
-        selected_y = [trn_dataset1.y_temp[i] for i in selected_views]
-        trn_dataset.pos = torch.stack(list(itertools.chain.from_iterable(selected_pos)), dim=0)
-        # trn_dataset1.comp = torch.stack(list(itertools.chain.from_iterable(selected_comp)), dim=0)
-        trn_dataset.comp = pad_sequence(list(itertools.chain.from_iterable(selected_comp)), batch_first=True,
-                                        padding_value=-1).to(
-            torch.int64)
-        if args.dataset == "hpo_neuro":
-            trn_dataset.y = torch.vstack(list(itertools.chain.from_iterable(selected_y)))
-        elif args.dataset == "em_user":
-            trn_dataset.y = torch.Tensor(list(itertools.chain.from_iterable(selected_y)))
-        else:
-            trn_dataset.y = torch.Tensor(list(itertools.chain.from_iterable(selected_y))).to(torch.int64)
-
-        trn_dataset = trn_dataset.to(config.device)
-
-        trn_loader1 = loader_fn(trn_dataset, batch_size, repeat + 1)
-        selected_views = random.sample(range(0, args.views), nve)
-        selected_pos = [trn_dataset1.pos_temp[i] for i in selected_views]
-        selected_comp = [trn_dataset1.comp_temp[i] for i in selected_views]
-        selected_y = [trn_dataset1.y_temp[i] for i in selected_views]
-        trn_dataset.pos = torch.stack(list(itertools.chain.from_iterable(selected_pos)), dim=0)
-        # trn_dataset1.comp = torch.stack(list(itertools.chain.from_iterable(selected_comp)), dim=0)
-        trn_dataset.comp = pad_sequence(list(itertools.chain.from_iterable(selected_comp)), batch_first=True,
-                                        padding_value=-1).to(
-            torch.int64)
-        if args.dataset == "hpo_neuro":
-            trn_dataset.y = torch.vstack(list(itertools.chain.from_iterable(selected_y)))
-        elif args.dataset == "em_user":
-            trn_dataset.y = torch.Tensor(list(itertools.chain.from_iterable(selected_y)))
-        else:
-            trn_dataset.y = torch.Tensor(list(itertools.chain.from_iterable(selected_y))).to(torch.int64)
-        trn_dataset = trn_dataset.to(config.device)
-        trn_loader2 = loader_fn(trn_dataset, batch_size, repeat + 1)
-        selected_views = random.sample(range(0, args.views), nve)
-        selected_pos = [trn_dataset1.pos_temp[i] for i in selected_views]
-        selected_comp = [trn_dataset1.comp_temp[i] for i in selected_views]
-        selected_y = [trn_dataset1.y_temp[i] for i in selected_views]
-        trn_dataset.pos = torch.stack(list(itertools.chain.from_iterable(selected_pos)), dim=0)
-        # trn_dataset1.comp = torch.stack(list(itertools.chain.from_iterable(selected_comp)), dim=0)
-        trn_dataset.comp = pad_sequence(list(itertools.chain.from_iterable(selected_comp)), batch_first=True,
-                                        padding_value=-1).to(
-            torch.int64)
-        if args.dataset == "hpo_neuro":
-            trn_dataset.y = torch.vstack(list(itertools.chain.from_iterable(selected_y)))
-        elif args.dataset == "em_user":
-            trn_dataset.y = torch.Tensor(list(itertools.chain.from_iterable(selected_y)))
-        else:
-            trn_dataset.y = torch.Tensor(list(itertools.chain.from_iterable(selected_y))).to(torch.int64)
-        trn_dataset = trn_dataset.to(config.device)
-        trn_loader3 = loader_fn(trn_dataset, batch_size, repeat + 1)
-        selected_views = random.sample(range(0, args.views), nve)
-        selected_pos = [trn_dataset1.pos_temp[i] for i in selected_views]
-        selected_comp = [trn_dataset1.comp_temp[i] for i in selected_views]
-        selected_y = [trn_dataset1.y_temp[i] for i in selected_views]
-        trn_dataset.pos = torch.stack(list(itertools.chain.from_iterable(selected_pos)), dim=0)
-        # trn_dataset1.comp = torch.stack(list(itertools.chain.from_iterable(selected_comp)), dim=0)
-        trn_dataset.comp = pad_sequence(list(itertools.chain.from_iterable(selected_comp)), batch_first=True,
-                                        padding_value=-1).to(
-            torch.int64)
-        if args.dataset == "hpo_neuro":
-            trn_dataset.y = torch.vstack(list(itertools.chain.from_iterable(selected_y)))
-        elif args.dataset == "em_user":
-            trn_dataset.y = torch.Tensor(list(itertools.chain.from_iterable(selected_y)))
-        else:
-            trn_dataset.y = torch.Tensor(list(itertools.chain.from_iterable(selected_y))).to(torch.int64)
-        trn_dataset = trn_dataset.to(config.device)
-        trn_loader4 = loader_fn(trn_dataset, batch_size, repeat + 1)
+        nve = args.nve
+        trn_loader1 = sample_views(args, nve, trn_dataset1, batch_size, repeat + 1)
+        trn_loader2 = sample_views(args, nve, trn_dataset1, batch_size, repeat + 1)
+        trn_loader3 = sample_views(args, nve, trn_dataset1, batch_size, repeat + 1)
+        trn_loader4 = sample_views(args, nve, trn_dataset1, batch_size, repeat + 1)
         val_loader = tloader_fn(val_dataset, batch_size, repeat + 1)
         tst_loader = tloader_fn(tst_dataset, batch_size, repeat + 1)
         end_pre = time.time()
@@ -455,6 +376,26 @@ def test(pool1="size",
         json.dump(exp_results, output_file)
 
 
+def sample_views(args, nve, trn_dataset1, batch_size, repeat):
+    trn_dataset = trn_dataset1
+    selected_views = random.sample(range(0, args.nv), nve)
+    selected_pos = [trn_dataset1.pos_temp[i] for i in selected_views]
+    selected_comp = [trn_dataset1.comp_temp[i] for i in selected_views]
+    selected_y = [trn_dataset1.y_temp[i] for i in selected_views]
+    trn_dataset.pos = torch.stack(list(itertools.chain.from_iterable(selected_pos)), dim=0)
+    trn_dataset.comp = pad_sequence(list(itertools.chain.from_iterable(selected_comp)), batch_first=True,
+                                    padding_value=-1).to(
+        torch.int64)
+    if args.dataset == "hpo_neuro":
+        trn_dataset.y = torch.vstack(list(itertools.chain.from_iterable(selected_y)))
+    elif args.dataset == "em_user":
+        trn_dataset.y = torch.Tensor(list(itertools.chain.from_iterable(selected_y)))
+    else:
+        trn_dataset.y = torch.Tensor(list(itertools.chain.from_iterable(selected_y))).to(torch.int64)
+    trn_dataset = trn_dataset.to(config.device)
+    return loader_fn(trn_dataset, batch_size, repeat)
+
+
 def ray_tune_run_helper(config, argument_class, device):
     argument_class.m = config['m']
     argument_class.M = config['M']
@@ -540,7 +481,8 @@ if __name__ == '__main__':
     parser.add_argument('--m', type=int, default=0)
     parser.add_argument('--M', type=int, default=0)
     parser.add_argument('--diffusion', action='store_true')
-    parser.add_argument('--views', type=int, default=1)
+    parser.add_argument('--nv', type=int, default=1)
+    parser.add_argument('--nve', type=int, default=1)
 
     parser.add_argument('--repeat', type=int, default=1)
     parser.add_argument('--device', type=int, default=0)

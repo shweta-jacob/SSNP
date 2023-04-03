@@ -69,15 +69,6 @@ class GDataset:
         self.pos_temp = subgraph_nodes_list
         self.comp_temp = batch_comp_nodes
 
-        # for idx in range(nv):
-        #     self.pos_temp[idx] = torch.stack(subgraph_nodes_list[idx], dim=0)
-            # self.comp_temp[idx] = torch.stack(batch_comp_nodes[idx], dim=0)
-            # if dataset == "hpo_neuro":
-            #     self.y_temp[idx] = torch.vstack(y[idx])
-            # elif dataset == "em_user":
-            #     self.y_temp[idx] = torch.Tensor(y[idx])
-            # else:
-            #     self.y_temp[idx] = torch.Tensor(y[idx]).to(torch.int64)
 
     def sample_pos_comp_test(self, m, M, views=1, device=0, row=None, col=None, dataset="ppi_bp"):
         print("Setting up non-stochastic data")
