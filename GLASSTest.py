@@ -293,6 +293,7 @@ def test(pool1="size",
             trn_dataset.y = torch.Tensor(list(itertools.chain.from_iterable(selected_y)))
         else:
             trn_dataset.y = torch.Tensor(list(itertools.chain.from_iterable(selected_y))).to(torch.int64)
+        trn_dataset = trn_dataset.to(config.device)
         trn_loader2 = loader_fn(trn_dataset, batch_size, repeat + 1)
         selected_views = random.sample(range(0, args.views), nve)
         selected_pos = [trn_dataset1.pos_temp[i] for i in selected_views]
@@ -309,6 +310,7 @@ def test(pool1="size",
             trn_dataset.y = torch.Tensor(list(itertools.chain.from_iterable(selected_y)))
         else:
             trn_dataset.y = torch.Tensor(list(itertools.chain.from_iterable(selected_y))).to(torch.int64)
+        trn_dataset = trn_dataset.to(config.device)
         trn_loader3 = loader_fn(trn_dataset, batch_size, repeat + 1)
         selected_views = random.sample(range(0, args.views), nve)
         selected_pos = [trn_dataset1.pos_temp[i] for i in selected_views]
@@ -325,6 +327,7 @@ def test(pool1="size",
             trn_dataset.y = torch.Tensor(list(itertools.chain.from_iterable(selected_y)))
         else:
             trn_dataset.y = torch.Tensor(list(itertools.chain.from_iterable(selected_y))).to(torch.int64)
+        trn_dataset = trn_dataset.to(config.device)
         trn_loader4 = loader_fn(trn_dataset, batch_size, repeat + 1)
         val_loader = tloader_fn(val_dataset, batch_size, repeat + 1)
         tst_loader = tloader_fn(tst_dataset, batch_size, repeat + 1)
