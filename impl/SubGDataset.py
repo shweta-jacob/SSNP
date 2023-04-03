@@ -32,6 +32,9 @@ class GDataset:
         self.y = y
         self.pos = pos
         self.comp = pos
+        self.y_temp = []
+        self.pos_temp = []
+        self.comp_temp = []
         self.num_nodes = x.shape[0]
 
     def __len__(self):
@@ -40,7 +43,43 @@ class GDataset:
     def __getitem__(self, idx):
         return self.pos[idx], self.y[idx]
 
-    def sample_pos_comp(self, m, M, views=1, device=0, row=None, col=None, dataset="ppi_bp"):
+    def sample_pos_comp_train(self, m, M, nv=1, device=0, row=None, col=None, dataset="ppi_bp"):
+        print("Setting up non-stochastic data")
+        row = row.to(device)
+        col = col.to(device)
+        y = [[] for _ in range(nv)]
+        batch_comp_nodes = [[] for _ in range(nv)]
+        subgraph_nodes_list = [[] for _ in range(nv)]
+        for idx, graph_nodes in enumerate(self.pos):
+            y_val = self.y[idx]
+            starting_for_rw = graph_nodes[graph_nodes != -1].tolist()
+            for i in range(nv):
+                starting_nodes = torch.tensor(starting_for_rw, dtype=torch.long)
+                start = starting_nodes.repeat(M).to(device)
+                node_ids = torch.ops.torch_cluster.random_walk(row, col, start, m, 1, 1)[0]
+                rw_nodes = torch.unique(node_ids.flatten()).tolist()
+                subgraph_nodes = set(starting_for_rw).intersection(set(rw_nodes))
+                complement_nodes = set(rw_nodes).difference(subgraph_nodes)
+
+                batch_comp_nodes[i].append(torch.Tensor(list(complement_nodes)))
+                subgraph_nodes_list[i].append(graph_nodes)
+                y[i].append(y_val)
+
+        self.y_temp = y
+        self.pos_temp = subgraph_nodes_list
+        self.comp_temp = batch_comp_nodes
+
+        # for idx in range(nv):
+        #     self.pos_temp[idx] = torch.stack(subgraph_nodes_list[idx], dim=0)
+            # self.comp_temp[idx] = torch.stack(batch_comp_nodes[idx], dim=0)
+            # if dataset == "hpo_neuro":
+            #     self.y_temp[idx] = torch.vstack(y[idx])
+            # elif dataset == "em_user":
+            #     self.y_temp[idx] = torch.Tensor(y[idx])
+            # else:
+            #     self.y_temp[idx] = torch.Tensor(y[idx]).to(torch.int64)
+
+    def sample_pos_comp_test(self, m, M, views=1, device=0, row=None, col=None, dataset="ppi_bp"):
         print("Setting up non-stochastic data")
         row = row.to(device)
         col = col.to(device)
