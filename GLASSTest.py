@@ -270,7 +270,7 @@ def test(pool1="size",
         scd = lr_scheduler.ReduceLROnPlateau(optimizer,
                                              factor=resi,
                                              min_lr=5e-5)
-        nve = 2
+        nve = 5
 
         val_score = 0
         tst_score = 0
@@ -278,22 +278,25 @@ def test(pool1="size",
         print(f"Warm up for {100 / num_div} steps in progress...")
         for i in range(300):
             t1 = time.time()
+            trn_dataset = trn_dataset1
             selected_views = random.sample(range(0, args.views), nve)
             selected_pos = [trn_dataset1.pos_temp[i] for i in selected_views]
             selected_comp = [trn_dataset1.comp_temp[i] for i in selected_views]
             selected_y = [trn_dataset1.y_temp[i] for i in selected_views]
-            trn_dataset1.pos = torch.stack(list(itertools.chain.from_iterable(selected_pos)), dim=0)
+            trn_dataset.pos = torch.stack(list(itertools.chain.from_iterable(selected_pos)), dim=0)
             # trn_dataset1.comp = torch.stack(list(itertools.chain.from_iterable(selected_comp)), dim=0)
-            trn_dataset1.comp = pad_sequence(list(itertools.chain.from_iterable(selected_comp)), batch_first=True, padding_value=-1).to(
+            trn_dataset.comp = pad_sequence(list(itertools.chain.from_iterable(selected_comp)), batch_first=True, padding_value=-1).to(
                 torch.int64)
             if args.dataset == "hpo_neuro":
-                trn_dataset1.y = torch.vstack(list(itertools.chain.from_iterable(selected_y)))
+                trn_dataset.y = torch.vstack(list(itertools.chain.from_iterable(selected_y)))
             elif args.dataset == "em_user":
-                trn_dataset1.y = torch.Tensor(list(itertools.chain.from_iterable(selected_y)))
+                trn_dataset.y = torch.Tensor(list(itertools.chain.from_iterable(selected_y)))
             else:
-                trn_dataset1.y = torch.Tensor(list(itertools.chain.from_iterable(selected_y))).to(torch.int64)
+                trn_dataset.y = torch.Tensor(list(itertools.chain.from_iterable(selected_y))).to(torch.int64)
 
-            trn_loader = loader_fn(trn_dataset1, batch_size, repeat + 1)
+            trn_dataset = trn_dataset.to(config.device)
+
+            trn_loader = loader_fn(trn_dataset, batch_size, repeat + 1)
             trn_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn, device=config.device,
                                           row=row, col=col, run=repeat + 1, epoch=i)
             trn_time.append(time.time() - t1)
