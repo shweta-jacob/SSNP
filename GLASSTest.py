@@ -257,6 +257,7 @@ def test(pool1="size",
         early_stop = {"ppi_bp": 100 / num_div, "hpo_metab": 50, "hpo_neuro": 50, "em_user": 10}
         gnn = buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio,
                          aggr, args, hypertuning)
+        nve = 5
         trn_dataset = trn_dataset1
         selected_views = random.sample(range(0, args.views), nve)
         selected_pos = [trn_dataset1.pos_temp[i] for i in selected_views]
@@ -334,7 +335,7 @@ def test(pool1="size",
         scd = lr_scheduler.ReduceLROnPlateau(optimizer,
                                              factor=resi,
                                              min_lr=5e-5)
-        nve = 5
+
 
         val_score = 0
         tst_score = 0
