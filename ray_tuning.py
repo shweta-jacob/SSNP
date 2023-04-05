@@ -10,7 +10,7 @@ from ray.tune import CLIReporter
 from ray.tune.schedulers import FIFOScheduler
 from ray.tune.utils.log import Verbosity
 
-import GLASSTest
+import ssnp
 
 init(log_to_driver=False)
 

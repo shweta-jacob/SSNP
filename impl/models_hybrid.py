@@ -422,6 +422,62 @@ class COMGraphMasterNet(nn.Module):
         return self.preds[id](emb)
 
 
+class COMGraphMLPMasterNet(nn.Module):
+    '''
+    Fork of GLASS but with (m, M, samples) driven sampling of inside and outside the subgraphs
+    '''
+
+    def __init__(self, preds: nn.ModuleList,
+                 pools: nn.ModuleList, model_type, hidden_dim, max_deg, diffusion):
+        super().__init__()
+        self.input_emb = nn.Embedding(max_deg + 1,
+                                      hidden_dim,
+                                      scale_grad_by_freq=False)
+        self.mlp = torch_geometric.nn.MLP(channel_list=[hidden_dim, hidden_dim],
+                                          act_first=True, act="ELU", dropout=[0.5], plain_last=False)
+        self.preds = preds
+        self.pools = pools
+        self.model_type = model_type
+        self.diffusion = diffusion
+        if self.diffusion and self.model_type == 2:
+            self.diffusion_mlp = torch_geometric.nn.MLP(channel_list=[hidden_dim * 2, hidden_dim],
+                                              act_first=True, act="ELU", dropout=[0.5])
+
+    def NodeEmb(self, x):
+        x = self.input_emb(x).reshape(x.shape[0], -1)
+        return self.mlp(x)
+
+    def Pool(self, emb, subG_node, comp_node, pool):
+        if self.model_type == 0:
+            batch, pos = pad2batch(subG_node)
+            emb_subg = emb[pos]
+            emb = pool[0](emb_subg, batch)
+        elif self.model_type == 1:
+            raise NotImplementedError("not implemented as of now")
+            batch_comp, pos_comp = pad2batch(comp_node)
+            emb_comp = emb[pos_comp]
+            emb = pool[1](emb_comp, batch_comp)
+        else:
+            batch, pos = pad2batch(subG_node)
+            emb_subg = emb[pos]
+            emb_subg = pool[0](emb_subg, batch)
+
+            batch_comp, pos_comp = pad2batch(comp_node)
+            emb_comp = emb[pos_comp]
+            emb_comp = pool[1](emb_comp, batch_comp)
+
+            emb = torch.cat([emb_subg, emb_comp], dim=-1)
+            if self.diffusion:
+                emb = self.diffusion_mlp(emb)
+
+        return emb
+
+    def forward(self, x, edge_index, edge_weight, subG_node, comp_node, row=None, col=None, z=None, device=None, id=0):
+        emb = self.NodeEmb(x)
+        emb = self.Pool(emb, subG_node, comp_node, self.pools)
+        return self.preds[id](emb)
+
+
 # models used for producing node embeddings.
 
 

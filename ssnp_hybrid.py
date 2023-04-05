@@ -174,7 +174,22 @@ def buildModel(hidden_dim, conv_layer, dropout, jk, pool1, pool2, z_ratio, aggr,
     else:
         raise NotImplementedError
 
-    gnn = models_hybrid.COMGraphMasterNet(conv, torch.nn.ModuleList([mlp]), pooling_layers, args.model, hidden_dim, conv_layer,
+    if args.use_mlp:
+        num_rep = 1
+        in_channels = hidden_dim * (1) * num_rep if jk else hidden_dim
+        if args.model == 0:
+            in_channels = hidden_dim * num_rep if jk else hidden_dim
+        if args.model == 2 and not args.diffusion:
+            # if MLP mixing is enabled, num_rep is 1 throughout, else it becomes 2
+            num_rep = 2
+            in_channels = hidden_dim * num_rep if jk else hidden_dim
+
+        mlp = MLP(channel_list=[in_channels, output_channels], dropout=[0], norm=None, act=None)
+        gnn = models_hybrid.COMGraphMLPMasterNet(preds=torch.nn.ModuleList([mlp]), pools=pooling_layers, model_type=args.model,
+                                       hidden_dim=hidden_dim, max_deg=max_deg, diffusion=args.diffusion).to(
+            config.device)
+    else:
+        gnn = models_hybrid.COMGraphMasterNet(conv, torch.nn.ModuleList([mlp]), pooling_layers, args.model, hidden_dim, conv_layer,
                                    args.diffusion).to(config.device)
 
     print("-" * 64)
@@ -489,6 +504,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_seed', action='store_true')
 
     parser.add_argument('--use_gcn_conv', action='store_true')
+    parser.add_argument('--use_mlp', action='store_true')
 
     args = parser.parse_args()
     run_helper(args)
