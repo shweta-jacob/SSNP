@@ -275,12 +275,14 @@ def test(pool1="size",
                                              factor=resi,
                                              min_lr=5e-5)
 
-
+        warmup = 50
+        if args.use_mlp:
+            warmup = 0
         val_score = 0
         tst_score = 0
         early_stop = 0
         print(f"Warm up for {100 / num_div} steps in progress...")
-        for i in range(300):
+        for i in range(args.epochs):
             t1 = time.time()
             trn_loader = random.choice([trn_loader1, trn_loader2, trn_loader3, trn_loader4])
 
@@ -289,7 +291,7 @@ def test(pool1="size",
             trn_time.append(time.time() - t1)
             scd.step(loss)
 
-            if i >= 50:
+            if i >= warmup:
                 score, _ = train_hybrid.test(gnn,
                                       val_loader,
                                       score_fn,
@@ -344,9 +346,10 @@ def test(pool1="size",
                             f"Best picked so far- val: {val_score:.4f} tst: {tst_score:.4f}, early stop: {early_stop} \n")
             if val_score >= 1 - 1e-5:
                 early_stop += 1
-            if early_stop > (100 / num_div):
-                print("Patience exhausted. Early stopping.")
-                break
+            if not args.use_mlp:
+                if early_stop > (100 / num_div):
+                    print("Patience exhausted. Early stopping.")
+                    break
         end_time = time.time()
         run_time = end_time - start_time
         run_times.append(run_time)
@@ -500,6 +503,7 @@ if __name__ == '__main__':
     parser.add_argument('--nve', type=int, default=1)
 
     parser.add_argument('--repeat', type=int, default=1)
+    parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--device', type=int, default=0)
     parser.add_argument('--use_seed', action='store_true')
 

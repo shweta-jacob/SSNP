@@ -9,15 +9,15 @@ The realworld datasets can be downloaded from [here](https://www.dropbox.com/sh/
 ### Commands to run our model
 To run Online Views (OV): 
 ```
-python ssnp.py --use_nodeid --use_seed --repeat 10 --dataset $dataset --model 2 --samples 1 --m $m --M $M --stochastic --device $gpu_id
+python ssnp.py --use_nodeid --use_seed --repeat 10 --epochs $epochs --dataset $dataset --model 2 --samples 1 --m $m --M $M --stochastic --device $gpu_id
 ```
 
 To run Pre-processed Views (PV): 
 ```
-python ssnp.py --use_nodeid --use_seed --repeat 10 --dataset $dataset --model 2 --samples 1 --m $m --M $M --views $views --device $gpu_id
+python ssnp.py --use_nodeid --use_seed --repeat 10 --epochs $epochs --dataset $dataset --model 2 --samples 1 --m $m --M $M --views $views --device $gpu_id
 ```
 
 To run Pre-processed Online Views (POV):
 ```
-python ssnp_hybrid.py --use_nodeid --use_seed --repeat 10 --dataset $dataset --model 2 --m $m --M $M --nv $nv --nve $nve --device $gpu_id
+python ssnp_hybrid.py --use_nodeid --use_seed --repeat 10 --epochs $epochs --dataset $dataset --model 2 --m $m --M $M --nv $nv --nve $nve --device $gpu_id
 ```

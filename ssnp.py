@@ -256,7 +256,7 @@ def test(pool1="size",
         tst_score = 0
         early_stop = 0
         print(f"Warm up for {100 / num_div} steps in progress...")
-        for i in range(300):
+        for i in range(args.epochs):
             t1 = time.time()
             trn_score, loss = train.train(optimizer, gnn, trn_loader, score_fn, loss_fn, device=config.device,
                                           row=row, col=col, run=repeat + 1, epoch=i)
@@ -448,6 +448,7 @@ if __name__ == '__main__':
     parser.add_argument('--views', type=int, default=1)
 
     parser.add_argument('--repeat', type=int, default=1)
+    parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--device', type=int, default=0)
     parser.add_argument('--use_seed', action='store_true')
 
