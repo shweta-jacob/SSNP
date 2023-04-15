@@ -1,6 +1,6 @@
 # SSNP: Stochastic Subgraph Neighborhood Pooling
 
-SSNP (Stochastic Subgraph Neighborhood Pooling) is a fork of [GLASS](https://github.com/Xi-yuanWang/GLASS). SSNP uses subgraph neighborhoods during pooling to increase the expressiveness of plain-GNNs on subgraph classification.
+SSNP (Stochastic Subgraph Neighborhood Pooling) is a fork of [GLASS](https://github.com/Xi-yuanWang/GLASS). SSNP uses subgraph neighborhoods during pooling to increase the expressiveness of plain-GNNs on subgraph classification. SSNP jointly aggregates the subgraph and its neighborhood (i.e., external topology) information without any computationally expensive operations such as labeling tricks. To improve scalability and generalization further, SSNP also uses a simple data augmentation pre-processing step that creates multiple sparse views of the subgraph neighborhood.
 
 <img src="https://user-images.githubusercontent.com/14086603/232235426-d83cdaf9-00bc-4a90-baa6-52c3ab0a81e6.png" width="650" height="250">
 
