@@ -4,6 +4,8 @@ SSNP (Stochastic Subgraph Neighborhood Pooling) is a fork of [GLASS](https://git
 
 <img src="https://user-images.githubusercontent.com/14086603/232235426-d83cdaf9-00bc-4a90-baa6-52c3ab0a81e6.png" width="650" height="250">
 
+arXiv link: https://arxiv.org/pdf/2304.08556.pdf
+
 
 #### Prepare Data
 
@@ -41,3 +43,13 @@ The following command line arguments are supported by our model
 
 ### Configs
 The dataset configurations such as pooling function, learning rate, number of convolution layers etc., can be set in compl-config/$dataset.
+
+## Bibtex
+If you find our work useful, please cite us using the following: 
+```
+@article{jacob2023stochastic,
+  title={Stochastic Subgraph Neighborhood Pooling for Subgraph Classification},
+  author={Jacob, Shweta Ann and Louis, Paul and Salehi-Abari, Amirali},
+  journal={arXiv preprint arXiv:2304.08556},
+  year={2023}
+}
