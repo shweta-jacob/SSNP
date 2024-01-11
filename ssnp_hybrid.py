@@ -492,7 +492,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_deg', action='store_true')
     parser.add_argument('--use_one', action='store_true')
     parser.add_argument('--use_nodeid', action='store_true')
-    # model 0 means use subgraph emb. model 1 means use complement emb. model 3 means use both subgraph and complement.
+    # model 0 means use subgraph emb. model 1 means use complement emb. model 2 means use both subgraph and complement.
     parser.add_argument('--model', type=int, default=0)
     # node label settings
     parser.add_argument('--use_maxzeroone', action='store_true')
